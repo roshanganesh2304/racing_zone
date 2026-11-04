@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>RACING ZONE - Real-Life Supercar Racing Game</title>
+  <meta name="description"
+    content="High-octane browser car racing game featuring authentic real-life supercars, precision drifting physics, AI rivals, garage customization, and global leaderboards.">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@700;800&family=Outfit:wght@400;600;700;800;900&display=swap"
+    rel="stylesheet">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+
+<body>
+
+  <!-- Fullscreen Mobile Orientation Enforcement Overlay -->
+  <div class="mobile-rotate-overlay" id="mobileRotateOverlay">
+    <div class="rotate-device-card">
+      <div class="rotate-phone-anim">
+        <div class="phone-frame">
+          <div class="phone-screen">
+            <span class="phone-car-icon">🏎️</span>
+          </div>
+        </div>
+        <div class="rotate-arrow-indicator">🔄</div>
+      </div>
+      <div class="rotate-brand-badge">RACING ZONE GT</div>
+      <h2 class="rotate-prompt-title">PLEASE ROTATE YOUR DEVICE</h2>
+      <p class="rotate-prompt-desc">
+        Racing Zone is designed for high-performance <strong>Widescreen Landscape Mode</strong>. Rotate your device to enter the game!
+      </p>
+      <button class="btn btn-primary btn-rotate-action" id="btnRequestLandscape">
+        <span>⛶</span> Rotate to Landscape
+      </button>
+      <button class="btn-rotate-dismiss-subtle" id="btnContinuePortrait">
+        Continue in portrait anyway
+      </button>
+    </div>
+  </div>
+
+  <!-- Top Navigation Bar -->
+  <header class="app-navbar">
+    <a class="brand-container" data-nav="home">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z" />
+        </svg>
+      </div>
+      <div>
+        <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <span class="brand-text">Racing Zone</span>
+          <span class="brand-badge">GT</span>
+        </div>
+      </div>
+    </a>
+
+    <nav>
+      <ul class="nav-links">
+        <li><a class="nav-link active" data-nav="home">Home</a></li>
+        <li><a class="nav-link" data-nav="tracks">Tracks</a></li>
+        <li><a class="nav-link" data-nav="garage">Garage</a></li>
+        <li><a class="nav-link" data-nav="leaderboard">Leaderboard</a></li>
+        <li><a class="nav-link" data-nav="career">Career</a></li>
+      </ul>
+    </nav>
+
+    <div class="user-status-bar">
+      <button class="nav-link" id="btnToggleAudio" style="font-size: 0.85rem; padding: 0.4rem 0.8rem;">
+        🔊 Audio On
+      </button>
+
+      <div class="coin-chip">
+        <span>🪙</span>
+        <span id="navUserCoins">$2,500</span>
+      </div>
+
+      <div class="level-chip">
+        <span id="navUserLevel">LVL 1</span>
+      </div>
+
+      <button class="profile-avatar-btn" id="btnNavAuth">
+        <span>👤</span>
+        <span id="navUserNickname">Guest Racer</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Viewport -->
+  <main class="app-viewport">
+
+    <!-- Screen 1: Home / Hero -->
+    <section class="screen-view active" id="screen-home">
+      <div class="hero-banner">
+        <div class="hero-content">
+          <div class="hero-tag">
+            <span>⚡</span> Real-Life Supercar Simulation
+          </div>
+          <h1 class="hero-title">
+            Push the <span>Limits</span> of Velocity.
+          </h1>
+          <!-- <p class="hero-desc">
+            Pilot authentic icons like the Porsche 911 GT3 RS, Ferrari SF90 Stradale, and Bugatti Chiron Super Sport. Master cornering lines, power slide through hairpins, and rise to the top of the leaderboards.
+          </p> -->
+          <div class="hero-actions">
+            <button class="btn btn-primary" data-nav="tracks">
+              <span>🏁</span> Play Now
+            </button>
+            <button class="btn btn-secondary" data-nav="garage">
+              <span>🏎️</span> Enter Garage
+            </button>
+          </div>
+        </div>
+
+        <div class="hero-visual">
+          <div id="hero3DContainer" class="hero-car-stage-3d">
+            <!-- Need for Speed Style Featured Supercar Overlay -->
+            <div class="nfs-hero-badge" id="nfsHeroBadge">
+              <div class="nfs-badge-tag">🔥 NEED FOR SPEED • HERO SHOWCASE</div>
+              <div class="nfs-badge-title" id="nfsHeroCarTitle">PORSCHE 911 GT3 RS</div>
+              <div class="nfs-badge-specs" id="nfsHeroCarSpecs">518 HP • 184 MPH • 0-60 3.0s</div>
+            </div>
+            <div class="nfs-rotate-hint">🔄 DRAG TO ROTATE 360°</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Feature Grid -->
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">🏎️</div>
+          <h3 class="feature-title">Real-Life Supercars</h3>
+          <p class="feature-desc">Accurately tuned aerodynamics, horsepower, 0-60 acceleration, and authentic body
+            design silhouettes.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">💨</div>
+          <h3 class="feature-title">Precision Drift Physics</h3>
+          <p class="feature-desc">Counter-steer into high-speed power slides with real tire skidmarks, tire smoke
+            particles, and nitrous boost.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🔊</div>
+          <h3 class="feature-title">Dynamic Engine Audio</h3>
+          <p class="feature-desc">Web Audio synthesized RPM revs, turbo blow-off valves, tire screech, and atmospheric
+            racing soundscapes.</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🛠️</div>
+          <h3 class="feature-title">Garage Customization</h3>
+          <p class="feature-desc">Customize factory paint jobs, upgrade engine stages, handling slicks, and nitro
+            injection systems.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen 2: Garage & Customization -->
+    <section class="screen-view" id="screen-garage">
+      <div class="garage-layout">
+        <!-- Showroom 360 Stage -->
+        <div class="showroom-stage-container">
+          <div class="showroom-title-bar">
+            <div>
+              <div class="car-brand-name" id="showroomCarBrand">Porsche</div>
+              <h2 class="car-model-name" id="showroomCarName">911 GT3 RS (992)</h2>
+            </div>
+            <div class="car-category-pill" id="showroomCategory">Track Weapon</div>
+          </div>
+
+          <div class="canvas-showroom-wrap" style="position: relative;">
+            <div id="showroom3DContainer"
+              style="width: 100%; height: 100%; position: relative; border-radius: var(--radius-md); overflow: hidden;">
+            </div>
+          </div>
+
+          <div class="car-carousel-controls">
+            <button class="carousel-nav-btn" id="btnPrevCar">‹</button>
+            <div class="car-selector-strip" id="carThumbnailsStrip"></div>
+            <button class="carousel-nav-btn" id="btnNextCar">›</button>
+          </div>
+
+          <div style="margin-top: 1.5rem; width: 100%; max-width: 400px;">
+            <button class="btn btn-primary" id="btnCarAction" style="width: 100%;">
+              Select for Racing
+            </button>
+          </div>
+        </div>
+
+        <!-- Specs & Customization Panel -->
+        <div class="garage-side-panel">
+          <!-- Real Life Performance Metrics -->
+          <div class="panel-card">
+            <div class="panel-heading">
+              <span>Performance Specs</span>
+              <span style="font-size: 0.8rem; color: var(--accent-cyan);">OEM Verified</span>
+            </div>
+
+            <div class="spec-row">
+              <div class="spec-label-row">
+                <span>Top Speed</span>
+                <span class="spec-val" id="statTopSpeedMph">184 MPH</span>
+              </div>
+              <div class="spec-progress-track">
+                <div class="spec-progress-fill" id="barTopSpeed" style="width: 70%;"></div>
+              </div>
+            </div>
+
+            <div class="spec-row">
+              <div class="spec-label-row">
+                <span>0-60 MPH Acceleration</span>
+                <span class="spec-val" id="statAccel060">3.0s</span>
+              </div>
+              <div class="spec-progress-track">
+                <div class="spec-progress-fill" id="barAccel" style="width: 85%;"></div>
+              </div>
+            </div>
+
+            <div class="spec-row">
+              <div class="spec-label-row">
+                <span>Cornering Downforce & Grip</span>
+                <span class="spec-val" id="barHandlingVal">98 / 100</span>
+              </div>
+              <div class="spec-progress-track">
+                <div class="spec-progress-fill" id="barHandling" style="width: 98%;"></div>
+              </div>
+            </div>
+
+            <div class="spec-row">
+              <div class="spec-label-row">
+                <span>Carbon Ceramic Braking</span>
+                <span class="spec-val" id="barBrakingVal">97 / 100</span>
+              </div>
+              <div class="spec-progress-track">
+                <div class="spec-progress-fill" id="barBraking" style="width: 97%;"></div>
+              </div>
+            </div>
+
+            <div class="real-life-stats-grid">
+              <div class="stat-item">
+                <div class="stat-item-label">Horsepower</div>
+                <div class="stat-item-val" id="statHorsepower">518 HP</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-item-label">Curb Weight</div>
+                <div class="stat-item-val" id="statWeight">1450 KG</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-item-label">Top Speed (KM/H)</div>
+                <div class="stat-item-val" id="statTopSpeedKmh">296 KM/H</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-item-label">Drivetrain</div>
+                <div class="stat-item-val" id="statDrivetrain">RWD</div>
+              </div>
+            </div>
+
+            <div style="margin-top: 0.8rem; font-size: 0.8rem; color: var(--text-muted);">
+              <strong>Engine:</strong> <span id="statEngineType">4.0L Naturally Aspirated Flat-6</span>
+            </div>
+          </div>
+
+          <!-- Paint Studio -->
+          <div class="panel-card" id="paintStudioCard">
+            <div class="panel-heading">
+              <span>Paint Studio</span>
+              <span id="paintStudioStatusBadge" class="paint-status-badge">🎨 Factory</span>
+            </div>
+
+            <!-- Locked message if car is unpurchased -->
+            <div id="paintLockedBanner" class="paint-locked-banner" style="display: none;">
+              <span class="paint-lock-icon">🔒</span>
+              <div class="paint-lock-text">
+                <span class="lock-title">Vehicle Not Purchased</span>
+                <span class="lock-subtitle">Buy this car to customize factory paint</span>
+              </div>
+            </div>
+
+            <div id="paintStudioControls" class="paint-studio-controls">
+              <div class="paint-swatches">
+                <div class="paint-swatch" data-color="#00bcd4" style="background: #00bcd4;" title="Shark Blue"></div>
+                <div class="paint-swatch" data-color="#e60026" style="background: #e60026;" title="Corsa Red"></div>
+                <div class="paint-swatch" data-color="#06d6a0" style="background: #06d6a0;" title="Verde Scandal"></div>
+                <div class="paint-swatch" data-color="#ff6f00" style="background: #ff6f00;" title="Papaya Spark"></div>
+                <div class="paint-swatch" data-color="#f2f2f2" style="background: #f2f2f2;" title="Pure Pearl"></div>
+                <div class="paint-swatch" data-color="#0d1b2a" style="background: #0d1b2a;" title="Nocturne Carbon"></div>
+                <div class="paint-swatch" data-color="#ffd600" style="background: #ffd600;" title="Racing Yellow"></div>
+                <div class="paint-swatch" data-color="#7209b7" style="background: #7209b7;" title="Midnight Purple"></div>
+              </div>
+              <div class="custom-picker-row">
+                <input type="color" id="customColorPicker" class="color-picker-input" value="#00bcd4">
+                <span>Custom Pigment Selector</span>
+              </div>
+
+              <!-- Paint Actions (Save & Reset) -->
+              <div class="paint-actions-row">
+                <button type="button" id="btnSavePaint" class="btn-save-paint" disabled>
+                  <span class="save-icon">💾</span> <span id="btnSavePaintText">Save Paint</span>
+                </button>
+                <button type="button" id="btnResetPaint" class="btn-reset-paint" title="Revert to original OEM factory color">
+                  <span>Factory Color</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Upgrades Shop -->
+          <div class="panel-card">
+            <div class="panel-heading">
+              <span>Performance Tuning</span>
+              <span>⚡</span>
+            </div>
+            <div class="upgrade-list">
+              <div class="upgrade-item">
+                <div class="upgrade-info">
+                  <span class="upgrade-name">ECU & Turbo Tuning</span>
+                  <span class="upgrade-level" id="stageEngineVal">Stage 1 / 5</span>
+                </div>
+                <button class="btn-upgrade" id="btnUpgradeEngine">Upgrade ($1,000)</button>
+              </div>
+
+              <div class="upgrade-item">
+                <div class="upgrade-info">
+                  <span class="upgrade-name">Racing Slicks & Suspension</span>
+                  <span class="upgrade-level" id="stageHandlingVal">Stage 1 / 5</span>
+                </div>
+                <button class="btn-upgrade" id="btnUpgradeHandling">Upgrade ($1,000)</button>
+              </div>
+
+              <div class="upgrade-item">
+                <div class="upgrade-info">
+                  <span class="upgrade-name">Nitrous Injection Tank</span>
+                  <span class="upgrade-level" id="stageNitroVal">Stage 1 / 5</span>
+                </div>
+                <button class="btn-upgrade" id="btnUpgradeNitro">Upgrade ($1,000)</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen 3: Tracks Selection -->
+    <section class="screen-view" id="screen-tracks">
+      <div class="section-header" style="margin-bottom: 1.5rem;">
+        <div class="hero-tag" style="margin-bottom: 0.5rem; display: inline-flex;">
+          <span>🏎️</span> CarX Highway Racing Operations
+        </div>
+        <h2 class="section-title">Highway Sector & Mission Briefing</h2>
+        <p class="section-subtitle">Select an interstate sector, tune traffic density & time of day, and engage in
+          high-speed highway duels.</p>
+      </div>
+
+      <div class="carx-stage-wrapper" id="tracksGridContainer">
+        <!-- Rendered dynamically by JavaScript -->
+      </div>
+    </section>
+
+    <!-- Screen 4: 3D Racing Game Arena -->
+    <section class="screen-view" id="screen-game">
+      <div class="game-container" style="position: relative; overflow: hidden;">
+        <!-- 3D Three.js WebGL Viewport Container -->
+        <div id="game3DContainer" style="width: 100%; height: 100%; position: absolute; top:0; left:0;"></div>
+
+        <!-- Fullscreen High-Speed Motion Lines & Nitro Warp Canvas -->
+        <canvas id="speedFxCanvas"
+          style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 10;"></canvas>
+
+        <!-- Floating 3D AI Rival Nametags & Distance Overlay -->
+        <div id="hudRivalTagsContainer"
+          style="position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 15; overflow: hidden;">
+        </div>
+
+        <!-- Realistic Cockpit Interior Dashboard & Windshield Overlay -->
+        <div id="cockpitInteriorOverlay" style="display: none; position: absolute; top:0; left:0; width:100%; height:100%; pointer-events: none; z-index: 12; overflow: hidden;">
+          <!-- Top Windshield Tint & Rearview Mirror with Live Traffic Blips -->
+          <div class="cockpit-sunstrip">
+            <div class="cockpit-rearview-mirror">
+              <span style="font-size: 0.6rem; font-weight: 800; color: rgba(255,255,255,0.4); font-family: 'JetBrains Mono', monospace; z-index: 2;">REARVIEW MIRROR</span>
+              <div class="mirror-horizon"></div>
+              <div id="mirrorBlips" style="position: absolute; width: 100%; height: 100%; top:0; left:0; pointer-events: none;"></div>
+            </div>
+          </div>
+
+          <!-- Carbon Fiber A-Pillars Framing the Windshield -->
+          <div class="cockpit-a-pillar-left"></div>
+          <div class="cockpit-a-pillar-right"></div>
+
+          <!-- Lower Dashboard Cowl, Digital Instrument Cluster & Dynamic Steering Wheel -->
+          <div class="cockpit-dashboard-lower">
+            <!-- Digital Instrument Cluster Binnacle -->
+            <div class="cockpit-binnacle">
+              <div class="cockpit-gear-badge" id="cockpitGear">G1</div>
+              <div class="cockpit-speed-badge">
+                <span id="cockpitSpeedVal">0</span>
+                <span>MPH</span>
+              </div>
+              <div class="cockpit-rpm-track">
+                <div class="cockpit-rpm-fill" id="cockpitRpmFill" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <!-- Dynamic Sports Steering Wheel (Rotates with steering input) -->
+            <div class="cockpit-steering-wheel-wrap">
+              <div class="cockpit-wheel-hub" id="cockpitSteeringWheel">
+                <div class="wheel-top-center-marker"></div>
+                <div class="wheel-spoke-left"></div>
+                <div class="wheel-spoke-right"></div>
+                <div class="wheel-spoke-bottom"></div>
+                <div class="wheel-center-badge">GT</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- HUD Layer -->
+        <div class="hud-overlay">
+          <!-- Top HUD Section (Pinned to top, completely leaving center screen clear) -->
+          <div class="hud-top-section">
+            <!-- Row 1: CarX Highway Route Card (Left), Highway Distance Progress Tracker (Center), and Holographic GPS Route (Right) -->
+            <div class="carx-race-top-banner">
+              <!-- Left: Highway Sector Card -->
+              <div class="hud-highway-header-card">
+                <div class="carx-shield-badge" id="hudTrackShieldBadge">CA</div>
+                <div class="hud-highway-info">
+                  <div class="carx-card-highway-sub" id="hudTrackHighwayCode">CA I-10 WESTBOUND EXPRESSWAY</div>
+                  <div class="hud-track-name-bold" id="hudTrackName">Los Santos: Vinewood & Downtown</div>
+                  <div class="hud-telemetry-tags">
+                    <span class="hud-tag">🚗 <span id="hudTrafficVal">Heavy (85%)</span></span>
+                    <span class="hud-tag" style="color: #ffd600;">🚨 <span id="hudPoliceVal">3-Star Patrol</span></span>
+                    <span class="hud-tag" style="color: #00f0ff;">⚡ <span id="hudSurfaceVal">Dry Asphalt
+                        100%</span></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Center: Highway Distance Progress Tracker -->
+              <div class="highway-progress-tracker" id="highwayProgressTracker">
+                <span class="track-dist-label">START 0.0 KM</span>
+                <div class="highway-track-bar">
+                  <div class="highway-track-fill" id="highwayTrackFill" style="width: 0%;"></div>
+                  <div class="highway-marker player-marker" id="hudPlayerMarker" style="left: 0%;">🏎️</div>
+                  <div class="highway-marker rival-marker" id="hudRivalMarker1" style="left: 12%;">🔴</div>
+                  <div class="highway-marker rival-marker" id="hudRivalMarker2" style="left: 22%;">🔴</div>
+                  <div class="highway-marker police-marker" id="hudPoliceMarker" style="left: 4%;">🚨</div>
+                  <div class="highway-marker finish-flag">🏁</div>
+                </div>
+                <span class="track-dist-label" id="hudTotalDistanceLabel">4.2 KM</span>
+              </div>
+
+              <!-- Right: Holographic GPS Route Mini-Card (Exact match to the track screen) -->
+              <div class="carx-mini-gps-card in-game-gps" id="hudGpsContainer">
+                <canvas id="hudLiveGpsCanvas" width="160" height="90"></canvas>
+                <div class="gps-label">HOLOGRAPHIC GPS ROUTE</div>
+              </div>
+            </div>
+
+            <!-- Row 2: Secondary Telemetry & Event Mission Objectives (Pinned right under Row 1) -->
+            <div class="hud-sub-top-bar">
+              <!-- Left Side: Race Rank, Lap Progress, Radio, Time, Camera -->
+              <div class="hud-quick-stats-row">
+                <div class="hud-panel hud-position-box">
+                  <span class="hud-label">Position</span>
+                  <div style="display: flex; align-items: baseline; gap: 0.2rem;">
+                    <span class="hud-position-val" id="hudPositionVal">1</span>
+                    <span class="hud-position-total">/ 4</span>
+                  </div>
+                </div>
+
+                <div class="hud-panel hud-lap-timer-box">
+                  <div>
+                    <span class="hud-label">Lap Progress</span>
+                    <div class="hud-lap-counter" id="hudLapCounter">LAP 1 / 3</div>
+                  </div>
+                  <div>
+                    <span class="hud-label">Lap Timer</span>
+                    <div class="hud-time-display" id="hudTimeVal">0:00.00</div>
+                  </div>
+                </div>
+
+                <!-- GTA Radio Station Badge -->
+                <div class="hud-panel hud-clickable-btn" id="hudRadioBtn" title="Switch Radio Station [R]"
+                  onclick="racingApp.gameEngine && racingApp.gameEngine.toggleRadioStation()">
+                  <span class="hud-label">Radio [R]</span>
+                  <div id="hudRadioBadge" style="font-weight: 800; color: #ff007f; font-size: 0.85rem;">📻 RADIO</div>
+                </div>
+
+                <!-- In-Game Sound Mute / Unmute Button -->
+                <div class="hud-panel hud-clickable-btn" id="hudAudioBtn" title="Toggle Sound [M]"
+                  onclick="racingApp.toggleAudio()">
+                  <span class="hud-label">Audio [M]</span>
+                  <div id="hudAudioBadge" style="font-weight: 800; color: #00f0ff; font-size: 0.85rem;">🔊 AUDIO ON</div>
+                </div>
+
+                <!-- Time of Day Badge & Toggle -->
+                <div class="hud-panel hud-clickable-btn" id="hudTimeOfDayBtn" title="Toggle Day / Sunset / Night [T]"
+                  onclick="racingApp.gameEngine && racingApp.gameEngine.toggleTimeOfDay()">
+                  <span class="hud-label">Time [T]</span>
+                  <div id="hudTimeOfDayBadge" style="font-weight: 800; color: #ffd600; font-size: 0.85rem;">🌙 NIGHT
+                  </div>
+                </div>
+
+                <!-- Camera View Badge (Chase / Interior View [C]) -->
+                <div class="hud-panel hud-clickable-btn" id="hudCameraBtn" title="Switch Camera View: Chase / Cockpit Interior / Hood [C]"
+                  onclick="racingApp.gameEngine && racingApp.gameEngine.toggleCameraMode()">
+                  <span class="hud-label">View [C]</span>
+                  <div id="cameraModeBadge" style="font-weight: 800; color: var(--accent-cyan); font-size: 0.85rem;">
+                    🏎️ CHASE</div>
+                </div>
+
+                <!-- Exit Race Button (Always accessible on Mobile & Desktop) -->
+                <div class="hud-panel hud-clickable-btn hud-exit-btn" id="hudExitBtn" title="Exit Race"
+                  onclick="racingApp.navigateTo('tracks')">
+                  <span class="hud-label">Exit</span>
+                  <div style="font-weight: 800; color: #ff2a5f; font-size: 0.85rem;">✕ EXIT</div>
+                </div>
+              </div>
+
+              <!-- Right Side: Event Mission Objectives (Matching the screen in the image) -->
+              <div class="hud-objectives-card" id="hudObjectivesCard">
+                <div class="hud-obj-header">
+                  <span>EVENT MISSION OBJECTIVES</span>
+                  <span id="wantedStarsDisplay" style="font-size: 0.95rem; letter-spacing: 1.5px;">
+                    <span style="color: rgba(255,255,255,0.2);">★</span><span
+                      style="color: rgba(255,255,255,0.2);">★</span><span
+                      style="color: rgba(255,255,255,0.2);">★</span><span
+                      style="color: rgba(255,255,255,0.2);">★</span><span style="color: rgba(255,255,255,0.2);">★</span>
+                  </span>
+                </div>
+                <div class="hud-obj-item" id="hudObj1">
+                  <span class="obj-star">⭐</span>
+                  <span class="obj-text">1st Place vs 3 AI Rivals</span>
+                  <span class="obj-status" id="hudObj1Status">POS 1/4</span>
+                </div>
+                <div class="hud-obj-item" id="hudObj2">
+                  <span class="obj-star">⚡</span>
+                  <span class="obj-text">3+ Near Misses</span>
+                  <span class="obj-status" id="hudObj2Status">0 / 3</span>
+                </div>
+                <div class="hud-obj-item" id="hudObj3">
+                  <span class="obj-star">🔥</span>
+                  <span class="obj-text">Top Speed 180+ MPH</span>
+                  <span class="obj-status" id="hudObj3Status">0 MPH</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CarX High-Speed Combo / Near Miss Popup (Center absolute overlay) -->
+          <div class="carx-feat-popup" id="carxFeatPopup" style="display: none;">
+            <div class="feat-badge-text" id="featBadgeText">⚡ NEAR MISS!</div>
+            <div class="feat-sub-text" id="featSubText">+$100 TRAFFIC COMBO</div>
+          </div>
+
+          <!-- Dynamic Drift Score Counter -->
+          <div class="hud-drift-score-box" id="hudDriftScoreBox" style="display: none;">
+            <span class="drift-score-title">DRIFT</span>
+            <span class="drift-score-val" id="hudDriftScoreVal">0 PTS</span>
+          </div>
+
+          <!-- Orientation Tip Prompt for Mobile Portrait -->
+          <div class="landscape-prompt" id="landscapePrompt">
+            <div class="landscape-prompt-content">
+              <span class="rotate-icon">🔄</span>
+              <span class="rotate-text">Rotate to <strong>Landscape</strong> for widescreen racing!</span>
+              <button class="rotate-dismiss" id="btnDismissRotate" aria-label="Dismiss">✕</button>
+            </div>
+          </div>
+
+          <!-- Countdown 3..2..1..GO Overlay -->
+          <div class="countdown-overlay" id="countdownOverlay">
+            <div class="countdown-number" id="countdownNumber">3</div>
+          </div>
+
+          <!-- Bottom HUD Cluster -->
+          <div class="hud-bottom-bar">
+            <!-- Digital Speedometer & Tachometer -->
+            <div class="hud-speedometer-cluster">
+              <div class="analog-speedo">
+                <canvas id="speedoCanvas" width="140" height="140" class="speedo-canvas"></canvas>
+              </div>
+              <div class="hud-panel digital-speed-readout">
+                <span class="digital-speed-val" id="digitalSpeedVal">0</span>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                  <span class="digital-speed-unit">MPH</span>
+                  <span class="hud-gear-indicator" id="hudGearVal">G1</span>
+                </div>
+              </div>
+
+              <!-- Nitro Gauge -->
+              <div class="hud-panel nitro-gauge-wrap">
+                <div
+                  style="display: flex; justify-content: space-between; font-size: 0.75rem; font-weight: 800; color: var(--accent-cyan);">
+                  <span>NITRO BOOST</span>
+                  <span>[SHIFT / N]</span>
+                </div>
+                <div class="nitro-bar-track">
+                  <div class="nitro-bar-fill" id="nitroBarFill"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- In-game controls guide / pause -->
+            <div class="hud-panel" style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.5;">
+              <div><strong>[W / S]</strong> Throttle / Reverse • <strong>[A / D]</strong> Steer •
+                <strong>[SPACE]</strong> Drift • <strong>[F]</strong> Recover to Track</div>
+              <div><strong>[E]</strong> Enter/Exit • <strong>[C]</strong> Camera • <strong>[T]</strong> Day/Night •
+                <strong>[R]</strong> GTA Radio • <strong>[P]</strong> Police</div>
+            </div>
+          </div>
+
+          <!-- Driving Controls Overlay (Mouse Clicks & Touch) -->
+          <div class="mobile-controls">
+            <!-- Left Side: Optional Steering Modes (Buttons / Wheel / Tilt) -->
+            <div class="mobile-steer-container" id="mobileSteerContainer">
+              <!-- Mode Selector Tabs -->
+              <div class="steer-mode-selector" id="steerModeSelector" title="Switch Steering Mode">
+                <button type="button" class="steer-mode-tab active" data-steer-mode="buttons" id="steerTabButtons" title="Touch Buttons">
+                  <span>🕹️</span><span class="steer-mode-label">Btns</span>
+                </button>
+                <button type="button" class="steer-mode-tab" data-steer-mode="wheel" id="steerTabWheel" title="Virtual Steering Wheel">
+                  <span>🎡</span><span class="steer-mode-label">Wheel</span>
+                </button>
+                <button type="button" class="steer-mode-tab" data-steer-mode="tilt" id="steerTabTilt" title="Gyro Device Tilt">
+                  <span>📱</span><span class="steer-mode-label">Tilt</span>
+                </button>
+              </div>
+
+              <!-- Mode 1: Left / Right Touch Buttons (Default) -->
+              <div class="mobile-steer-group" id="steerButtonsGroup">
+                <button class="touch-btn" id="btnSteerLeft" title="Steer Left [A / ◀]">
+                  <span>◀</span>
+                  <span style="font-size: 0.62rem; font-weight: 700; letter-spacing: 0.5px;">LEFT</span>
+                </button>
+                <button class="touch-btn" id="btnSteerRight" title="Steer Right [D / ▶]">
+                  <span>▶</span>
+                  <span style="font-size: 0.62rem; font-weight: 700; letter-spacing: 0.5px;">RIGHT</span>
+                </button>
+              </div>
+
+              <!-- Mode 2: Interactive Virtual Steering Wheel -->
+              <div class="mobile-wheel-group" id="steerWheelGroup" style="display: none;">
+                <div class="virtual-wheel-outer" id="virtualWheelOuter">
+                  <div class="virtual-wheel" id="virtualSteeringWheel">
+                    <div class="wheel-marker-top"></div>
+                    <div class="wheel-spoke wheel-spoke-h"></div>
+                    <div class="wheel-spoke wheel-spoke-v"></div>
+                    <div class="wheel-hub">
+                      <span class="wheel-hub-badge">GT</span>
+                    </div>
+                  </div>
+                  <div class="virtual-wheel-hint">DRAG TO TURN</div>
+                </div>
+              </div>
+
+              <!-- Mode 3: Device Gyroscope Tilt Gauge -->
+              <div class="mobile-tilt-group" id="steerTiltGroup" style="display: none;">
+                <div class="tilt-gauge-card" id="tiltGaugeCard">
+                  <div class="tilt-gauge-header">
+                    <span>📱 TILT ACTIVE</span>
+                    <span class="tilt-angle-val" id="tiltAngleVal">0°</span>
+                  </div>
+                  <div class="tilt-level-track">
+                    <div class="tilt-level-center"></div>
+                    <div class="tilt-level-bubble" id="tiltBubble"></div>
+                  </div>
+                  <div class="tilt-status-sub" id="tiltStatusSub">Tilt phone left / right</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Standalone Dedicated Mobile Nitro Button -->
+            <div class="mobile-nitro-wrapper">
+              <button class="touch-btn touch-btn-nitro standalone-nitro-btn" id="btnNitro" title="Hold for Nitro Boost [Shift / N]">
+                <span class="nitro-icon">🚀</span>
+                <span class="nitro-label">NITRO</span>
+                <span class="nitro-sub">HOLD</span>
+              </button>
+            </div>
+
+            <div class="mobile-pedal-group">
+              <button class="touch-btn" id="btnHandbrake" title="Handbrake Drift [SPACE]">
+                <span>⚡</span>
+                <span style="font-size: 0.58rem; font-weight: 800; color: #ffd600;">DRIFT</span>
+              </button>
+              <button class="touch-btn" id="btnBrake" title="Brake / Reverse [S / ▼]">
+                <span>▼</span>
+                <span style="font-size: 0.58rem; font-weight: 800; color: #ff2a5f;">BRAKE</span>
+              </button>
+              <button class="touch-btn" id="btnGas" title="Throttle / Accelerate [W / ▲]">
+                <span>▲</span>
+                <span style="font-size: 0.62rem; font-weight: 800; color: #00f0ff;">GAS</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Screen 5: Leaderboard -->
+    <section class="screen-view" id="screen-leaderboard">
+      <div class="section-header">
+        <h2 class="section-title">Global Hall of Fame</h2>
+        <p class="section-subtitle">Top drivers ranked by career victories and track records.</p>
+      </div>
+
+      <div class="tabs-bar">
+        <button class="tab-btn active" onclick="racingApp.loadLeaderboard('wins')">Most Victories</button>
+        <button class="tab-btn" onclick="racingApp.loadLeaderboard('level')">Driver Level</button>
+        <button class="tab-btn" onclick="racingApp.loadLeaderboard('track', 'monaco-city-circuit')">Monaco
+          Records</button>
+        <button class="tab-btn" onclick="racingApp.loadLeaderboard('track', 'tokyo-shuto-c1')">Tokyo Wangan
+          Records</button>
+      </div>
+
+      <div class="table-card">
+        <table class="leaderboard-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Driver</th>
+              <th>Stats</th>
+              <th>Prize Earnings</th>
+              <th>Career Record</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboardTableBody">
+            <!-- Dynamically populated -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Screen 6: Career & Profile -->
+    <section class="screen-view" id="screen-career">
+      <div class="section-header">
+        <h2 class="section-title">Driver Career Dossier</h2>
+        <p class="section-subtitle">Track your career milestones, race history, and trophy achievements.</p>
+      </div>
+
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">👤</div>
+          <h3 class="feature-title" id="careerNickname">ApexRacer</h3>
+          <p class="feature-desc" id="careerLevel">Driver Level 1</p>
+          <div style="margin-top: 1rem;">
+            <div class="spec-label-row">
+              <span>Experience</span>
+              <span class="spec-val" id="careerXpText">120 / 500 XP</span>
+            </div>
+            <div class="spec-progress-track">
+              <div class="spec-progress-fill" id="careerXpFill" style="width: 24%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🏆</div>
+          <h3 class="feature-title">Career Wins</h3>
+          <div style="font-size: 2.2rem; font-weight: 900; color: var(--accent-gold);" id="careerWins">0</div>
+          <p class="feature-desc">Total Races: <span id="careerRaces">0</span> (<span id="careerWinRate">0%</span> Win
+            Rate)</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">⏱️</div>
+          <h3 class="feature-title">Fastest Lap</h3>
+          <div style="font-size: 2.2rem; font-weight: 900; font-family: var(--font-mono); color: var(--accent-cyan);"
+            id="careerBestLap">--</div>
+          <p class="feature-desc">All-time personal best lap time</p>
+        </div>
+
+        <div class="feature-card">
+          <div class="feature-icon">🪙</div>
+          <h3 class="feature-title">Total Cash</h3>
+          <div style="font-size: 2.2rem; font-weight: 900; color: var(--accent-gold);" id="careerCoins">$2,500</div>
+          <p class="feature-desc">Available for car tuning and acquisition</p>
+        </div>
+      </div>
+
+      <!-- Achievements -->
+      <h3 style="font-size: 1.5rem; font-weight: 800; margin: 2rem 0 1rem;">Trophy Achievements</h3>
+      <div class="features-grid" id="achievementsContainer">
+        <!-- Rendered dynamically -->
+      </div>
+
+      <!-- Recent Races Table -->
+      <h3 style="font-size: 1.5rem; font-weight: 800; margin: 2.5rem 0 1rem;">Recent Races History</h3>
+      <div class="table-card">
+        <table class="leaderboard-table">
+          <thead>
+            <tr>
+              <th>Track Circuit</th>
+              <th>Car Driven</th>
+              <th>Finish</th>
+              <th>Best Lap</th>
+              <th>Reward</th>
+            </tr>
+          </thead>
+          <tbody id="careerHistoryBody">
+            <!-- Populated via API -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+ 
+   <!-- Mobile Bottom Navigation Bar (Visible on mobile portrait/tablet outside race) -->
+   <nav class="mobile-bottom-nav" id="mobileBottomNav">
+     <a class="mobile-nav-item active" data-nav="home">
+       <span class="mobile-nav-icon">🏠</span>
+       <span class="mobile-nav-label">Home</span>
+     </a>
+     <a class="mobile-nav-item" data-nav="tracks">
+       <span class="mobile-nav-icon">🏁</span>
+       <span class="mobile-nav-label">Tracks</span>
+     </a>
+     <a class="mobile-nav-item" data-nav="garage">
+       <span class="mobile-nav-icon">🏎️</span>
+       <span class="mobile-nav-label">Garage</span>
+     </a>
+     <a class="mobile-nav-item" data-nav="leaderboard">
+       <span class="mobile-nav-icon">🏆</span>
+       <span class="mobile-nav-label">Ranks</span>
+     </a>
+     <a class="mobile-nav-item" data-nav="career">
+       <span class="mobile-nav-icon">👤</span>
+       <span class="mobile-nav-label">Career</span>
+     </a>
+   </nav>
+
+  <!-- Race Results Modal -->
+  <div class="modal-backdrop" id="resultsModal">
+    <div class="results-card">
+      <div class="results-position-crown" id="resCrown">👑</div>
+      <h2 class="results-position-title" id="resPositionTitle">VICTORY - 1ST PLACE!</h2>
+      <div class="results-track-name" id="resTrackName">Monaco Grand Prix Circuit</div>
+
+      <div class="results-stats-row">
+        <div class="result-stat-card">
+          <div class="result-stat-label">Total Time</div>
+          <div class="result-stat-val" id="resTotalTime">1:42.50</div>
+        </div>
+        <div class="result-stat-card">
+          <div class="result-stat-label">Best Lap</div>
+          <div class="result-stat-val" id="resBestLap">33.20s</div>
+        </div>
+        <div class="result-stat-card">
+          <div class="result-stat-label">Top Speed</div>
+          <div class="result-stat-val" id="resTopSpeed">208 MPH</div>
+        </div>
+      </div>
+
+      <div class="rewards-showcase">
+        <div class="reward-item" style="color: var(--accent-gold);">
+          <span>🪙</span>
+          <span id="resPrizeCoins">+$850</span>
+        </div>
+        <div class="reward-item" style="color: var(--accent-cyan);">
+          <span>⚡</span>
+          <span id="resXpEarned">+500 XP</span>
+        </div>
+      </div>
+
+      <div class="results-actions">
+        <button class="btn btn-primary" id="btnResRaceAgain">
+          <span>🔄</span> Race Again
+        </button>
+        <button class="btn btn-secondary" id="btnResGarage">
+          <span>🏎️</span> Go to Garage
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Authentication Modal -->
+  <div class="modal-backdrop" id="authModal">
+    <div class="auth-card">
+      <h3 style="font-size: 1.6rem; font-weight: 800; margin-bottom: 0.5rem;" id="authTitle">RACER LOGIN</h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1.5rem;">
+        Save your garage, progression, and leaderboard records permanently.
+      </p>
+
+      <div class="form-group" id="authNicknameGroup" style="display: none;">
+        <label class="form-label">Driver Call-Sign / Nickname</label>
+        <input type="text" id="authNickname" class="form-input" placeholder="e.g. ApexPredator">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input type="text" id="authUsername" class="form-input" placeholder="Enter username">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="authPassword" class="form-input" placeholder="Enter password">
+      </div>
+
+      <button class="btn btn-primary" id="btnAuthSubmit" style="width: 100%; margin-top: 1rem;">
+        Sign In
+      </button>
+
+      <div style="margin-top: 1.5rem; text-align: center;">
+        <a href="#" id="linkToggleAuthMode"
+          style="color: var(--accent-cyan); text-decoration: none; font-size: 0.9rem; font-weight: 600;">
+          Need an account? Register now
+        </a>
+      </div>
+
+      <div style="margin-top: 1rem; text-align: center;">
+        <button class="btn btn-secondary" id="btnCloseAuth" style="padding: 0.4rem 1rem; font-size: 0.8rem;">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Three.js 3D Engine & Loaders -->
+  <script src="/static/js/three.min.js"></script>
+  <script src="/static/js/loaders/fflate.min.js"></script>
+  <script>if (typeof fflate !== 'undefined') window.fflate = fflate;</script>
+  <script src="/static/js/loaders/GLTFLoader.js"></script>
+  <script src="/static/js/loaders/FBXLoader.js"></script>
+  <script src="/static/js/loaders/MTLLoader.js"></script>
+  <script src="/static/js/loaders/OBJLoader.js"></script>
+  <script src="/static/js/audio.js"></script>
+  <script src="/static/js/game/car_models.js"></script>
+  <script src="/static/js/game/car_models_3d.js"></script>
+  <script src="/static/js/game/character_3d.js"></script>
+  <script src="/static/js/game/world_3d.js"></script>
+  <script src="/static/js/game/traffic_police_3d.js"></script>
+  <script src="/static/js/game/tracks_data.js"></script>
+  <script src="/static/js/game/physics.js"></script>
+  <script src="/static/js/game/ai.js"></script>
+  <script src="/static/js/game/engine_3d.js"></script>
+  <script src="/static/js/game/engine.js"></script>
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+
+</html>

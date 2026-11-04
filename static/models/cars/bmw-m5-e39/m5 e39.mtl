@@ -1,0 +1,910 @@
+newmtl Meshesbnr34interior0221Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.027451 0.027451 0.027451 
+
+d 1
+
+Ns 0
+
+map_Ka Meshesbnr34interior0221_diff.png
+map_Kd Meshesbnr34interior0221_diff.png
+map_d Meshesbnr34interior0221_diff.png
+
+newmtl S1Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka S1_diff.png
+map_Kd S1_diff.png
+map_d S1_diff.png
+
+newmtl Meshesbnr34interior0171Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.027451 0.027451 0.027451 
+
+d 1
+
+Ns 0
+
+map_Ka Meshesbnr34interior0171_diff.png
+map_Kd Meshesbnr34interior0171_diff.png
+map_d Meshesbnr34interior0171_diff.png
+
+newmtl Meshesbnr34interior0131Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.0627451 0.0627451 0.0627451 
+
+d 0.980392
+
+Ns 0
+
+map_Ka Meshesbnr34interior0131_diff.png
+map_Kd Meshesbnr34interior0131_diff.png
+map_d Meshesbnr34interior0131_diff.png
+
+newmtl Text8Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 0.901961
+
+Ns 0
+
+map_Ka Interior2_diff.png
+map_Kd Interior2_diff.png
+map_d Interior2_diff.png
+
+newmtl Meshpart23Mtl
+Material Color
+Ka 0.00258583 0.00258583 0.00258583
+Kd 0.00258583 0.00258583 0.00258583
+Ks 0.00102419 0.00102419 0.00102419 
+
+d 0.701961
+
+Ns 0
+
+newmtl Meshesinteriorarrow21Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.0392157 0.0392157 0.0392157 
+
+d 1
+
+Ns 0
+
+map_Ka Meshesinteriorarrow21_diff.png
+map_Kd Meshesinteriorarrow21_diff.png
+map_d Meshesinteriorarrow21_diff.png
+
+newmtl Bolts1Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka Bolts1_diff.png
+map_Kd Bolts1_diff.png
+map_d Bolts1_diff.png
+
+newmtl Spoke1Mtl
+Material Color
+Ka 0.103634 0.108711 0.14198
+Kd 0.103634 0.108711 0.14198
+Ks 0.0690894 0.0724741 0.0946535 
+
+d 1
+
+Ns 255
+
+map_Ka FuelPressure1_diff.png
+map_Kd FuelPressure1_diff.png
+map_d FuelPressure1_diff.png
+
+map_Bump FuelPressure1_nmap.png
+
+map_Ns FuelPressure1_spec.png
+
+newmtl Tire1Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.027451 0.027451 0.027451 
+
+d 1
+
+Ns 0
+
+map_Ka Tire1_diff.png
+map_Kd Tire1_diff.png
+map_d Tire1_diff.png
+
+newmtl Cupper1Mtl
+Material Color
+Ka 0.940601 0.940601 0.940601
+Kd 0.940601 0.940601 0.940601
+Ks 0.372552 0.372552 0.372552 
+
+d 0.501961
+
+Ns 0
+
+newmtl Hub1Mtl
+Material Color
+Ka 1 0.133209 0.612066
+Kd 1 0.133209 0.612066
+Ks 0.396078 0.052761 0.242426 
+
+d 0.501961
+
+Ns 0
+
+newmtl Meshpart28Mtl
+Material Color
+Ka 0.940601 0.940601 0.940601
+Kd 0.940601 0.940601 0.940601
+Ks 0.940601 0.940601 0.940601 
+
+d 1
+
+Ns 0
+
+map_Ka Mirror1_diff.png
+map_Kd Mirror1_diff.png
+map_d Mirror1_diff.png
+
+map_Bump Mirror1_nmap.png
+
+map_Ns Mirror1_spec.png
+
+newmtl Upperarm1Mtl
+Material Color
+Ka 0.121986 0.0143105 0.645555
+Kd 0.121986 0.0143105 0.645555
+Ks 0.0483159 0.00566809 0.255691 
+
+d 0.501961
+
+Ns 0
+
+newmtl Meshesbnr34interior0181Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka Meshesbnr34interior0181_diff.png
+map_Kd Meshesbnr34interior0181_diff.png
+map_d Meshesbnr34interior0181_diff.png
+
+newmtl Meshpart10Mtl
+Material Color
+Ka 0.00258583 0.00258583 0.00258583
+Kd 0.00258583 0.00258583 0.00258583
+Ks 0.00102419 0.00102419 0.00102419 
+
+d 0.803922
+
+Ns 0
+
+newmtl A3Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka A3_diff.png
+map_Kd A3_diff.png
+map_d A3_diff.png
+
+newmtl Meshesbmwheadlights0001headlights00201Mtl
+Material Color
+Ka 0.940601 0.940601 0.940601
+Kd 0.940601 0.940601 0.940601
+Ks 0.0848385 0.0848385 0.0848385 
+
+d 0.501961
+
+Ns 0
+
+newmtl Meshesbmwheadlights0009headlights00191Mtl
+Material Color
+Ka 0.0461488 0.0461488 0.0461488
+Kd 0.0461488 0.0461488 0.0461488
+Ks 0.0182786 0.0182786 0.0182786 
+
+d 1
+
+Ns 0
+
+newmtl Meshesbmwexhaust2exhaust20071Mtl
+Material Color
+Ka 0.74453 0.74453 0.737205
+Kd 0.74453 0.74453 0.737205
+Ks 0.0875918 0.0875918 0.08673 
+
+d 1
+
+Ns 0
+
+map_Ka Meshesbmwexhaust2exhaust20071_diff.png
+map_Kd Meshesbmwexhaust2exhaust20071_diff.png
+map_d Meshesbmwexhaust2exhaust20071_diff.png
+
+map_Bump Meshesbmwexhaust2exhaust20071_nmap.png
+
+map_Ns Meshesbmwexhaust2exhaust20071_spec.png
+
+newmtl MountPart1Mtl
+Material Color
+Ka 0.373615 0.368591 0.383775
+Kd 0.373615 0.368591 0.383775
+Ks 0.147981 0.145991 0.152005 
+
+d 0.501961
+
+Ns 0
+
+newmtl HoodBadge1Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka HoodBadge1_diff.png
+map_Kd HoodBadge1_diff.png
+map_d HoodBadge1_diff.png
+
+newmtl Meshesbmwbody002body0111Mtl
+Material Color
+Ka 0.144972 0.20836 0.383775
+Kd 0.144972 0.20836 0.383775
+Ks 0.0574203 0.0825268 0.152005 
+
+d 1
+
+Ns 0
+
+newmtl Meshesbmwtrunkbadge0trunkbadge00052Mtl
+Material Color
+Ka 0.00226295 0.018913 0.722672
+Kd 0.00226295 0.018913 0.722672
+Ks 0.000896307 0.00749103 0.286235 
+
+d 1
+
+Ns 0
+
+newmtl Meshesbnr34interior0231Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.027451 0.027451 0.027451 
+
+d 1
+
+Ns 0
+
+map_Ka Meshesbnr34interior0231_diff.png
+map_Kd Meshesbnr34interior0231_diff.png
+map_d Meshesbnr34interior0231_diff.png
+
+newmtl Meshesbmwbumper008bumper0141Mtl
+Material Color
+Ka 0.940601 0.940601 0.940601
+Kd 0.940601 0.940601 0.940601
+Ks 0.372552 0.372552 0.372552 
+
+d 0.4
+
+Ns 0
+
+newmtl Meshesbmwtrunkbadge0trunkbadge00051Mtl
+Material Color
+Ka 0.180144 0 0
+Kd 0.180144 0 0
+Ks 0.0713513 0 0 
+
+d 1
+
+Ns 0
+
+newmtl Disc1Mtl
+Material Color
+Ka 5.07705e-06 5.07705e-06 5.07705e-06
+Kd 5.07705e-06 5.07705e-06 5.07705e-06
+Ks 2.01091e-06 2.01091e-06 2.01091e-06 
+
+d 1
+
+Ns 0
+
+map_Ka Disc1_diff.png
+map_Kd Disc1_diff.png
+map_d Disc1_diff.png
+
+newmtl Upperarmb1Mtl
+Material Color
+Ka 1 0.442323 0
+Kd 1 0.442323 0
+Ks 0.396078 0.175195 0 
+
+d 0.501961
+
+Ns 0
+
+newmtl FrontBody2Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka FrontBody2_diff.png
+map_Kd FrontBody2_diff.png
+map_d FrontBody2_diff.png
+
+newmtl Meshesbmwsteklosteklo0021Mtl
+Material Color
+Ka 0.00258583 0.00258583 0.00258583
+Kd 0.00258583 0.00258583 0.00258583
+Ks 0.00102419 0.00102419 0.00102419 
+
+d 0.2
+
+Ns 0
+
+newmtl Glass21Mtl
+Material Color
+Ka 0.00258583 0.00258583 0.00258583
+Kd 0.00258583 0.00258583 0.00258583
+Ks 0.00102419 0.00102419 0.00102419 
+
+d 0.501961
+
+Ns 0
+
+newmtl Meshesbmwbumper003bumper0172Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka Meshesbmwbumper003bumper0172_diff.png
+map_Kd Meshesbmwbumper003bumper0172_diff.png
+map_d Meshesbmwbumper003bumper0172_diff.png
+
+newmtl Screw2Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 0.301961
+
+Ns 0
+
+map_Ka Screw2_diff.png
+map_Kd Screw2_diff.png
+map_d Screw2_diff.png
+
+newmtl Interior1Mtl
+Material Color
+Ka 0.00258583 0.00258583 0.00258583
+Kd 0.00258583 0.00258583 0.00258583
+Ks 0.000162248 0.000162248 0.000162248 
+
+d 1
+
+Ns 0
+
+newmtl Glass2Mtl
+Material Color
+Ka 0.00258583 0.00258583 0.00258583
+Kd 0.00258583 0.00258583 0.00258583
+Ks 0.00102419 0.00102419 0.00102419 
+
+d 0.603922
+
+Ns 0
+
+newmtl Text2Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 0.901961
+
+Ns 0
+
+map_Ka Text2_diff.png
+map_Kd Text2_diff.png
+map_d Text2_diff.png
+
+newmtl Mirror1Mtl
+Material Color
+Ka 0.00258583 0.00258583 0.00258583
+Kd 0.00258583 0.00258583 0.00258583
+Ks 0.00258583 0.00258583 0.00258583 
+
+d 1
+
+Ns 0
+
+map_Ka Mirror1_diff.png
+map_Kd Mirror1_diff.png
+map_d Mirror1_diff.png
+
+map_Bump Mirror1_nmap.png
+
+map_Ns Mirror1_spec.png
+
+newmtl Meshesbnr34interior0241Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.027451 0.027451 0.027451 
+
+d 1
+
+Ns 0
+
+map_Ka Meshesbnr34interior0241_diff.png
+map_Kd Meshesbnr34interior0241_diff.png
+map_d Meshesbnr34interior0241_diff.png
+
+newmtl Interior4Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 0.901961
+
+Ns 0
+
+map_Ka Interior4_diff.png
+map_Kd Interior4_diff.png
+map_d Interior4_diff.png
+
+newmtl Meshpart6Mtl
+Material Color
+Ka 1 0 0
+Kd 1 0 0
+Ks 0.0901961 0 0 
+
+d 0.4
+
+Ns 0
+
+newmtl Engineblock0031Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka Engineblock0031_diff.png
+map_Kd Engineblock0031_diff.png
+map_d Engineblock0031_diff.png
+
+newmtl Engineblock0011Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka Engineblock0011_diff.png
+map_Kd Engineblock0011_diff.png
+map_d Engineblock0011_diff.png
+
+newmtl RearBodyAndCamera1Mtl
+Material Color
+Ka 0.00715504 0.018913 0.0315514
+Kd 0.00715504 0.018913 0.0315514
+Ks 0.00283396 0.00749103 0.0124968 
+
+d 1
+
+Ns 0
+
+newmtl Ln14Mtl
+Material Color
+Ka 0.00258583 0.00258583 0.00258583
+Kd 0.00258583 0.00258583 0.00258583
+Ks 0.000233231 0.000233231 0.000233231 
+
+d 1
+
+Ns 0
+
+newmtl LeftPiping1Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.027451 0.027451 0.027451 
+
+d 1
+
+Ns 0
+
+map_Ka LeftPiping1_diff.png
+map_Kd LeftPiping1_diff.png
+map_d LeftPiping1_diff.png
+
+newmtl Springtop1Mtl
+Material Color
+Ka 0.560499 0.0169881 0.00775103
+Kd 0.560499 0.0169881 0.00775103
+Ks 0.222002 0.0067286 0.00307001 
+
+d 0.501961
+
+Ns 0
+
+newmtl Meshpart2Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.027451 0.027451 0.027451 
+
+d 1
+
+Ns 0
+
+map_Ka Meshpart2_diff.png
+map_Kd Meshpart2_diff.png
+map_d Meshpart2_diff.png
+
+newmtl Meshpart1Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.666667 0.666667 0.666667 
+
+d 1
+
+Ns 255
+
+map_Ka Meshpart1_diff.png
+map_Kd Meshpart1_diff.png
+map_d Meshpart1_diff.png
+
+newmtl Glass11Mtl
+Material Color
+Ka 0.147998 0.0277553 0.20471
+Kd 0.147998 0.0277553 0.20471
+Ks 0.0586188 0.0109933 0.0810813 
+
+d 0.501961
+
+Ns 0
+
+newmtl FuelPressure1Mtl
+Material Color
+Ka 0.373615 0.368591 0.383775
+Kd 0.373615 0.368591 0.383775
+Ks 0.249077 0.245727 0.25585 
+
+d 1
+
+Ns 255
+
+map_Ka FuelPressure1_diff.png
+map_Kd FuelPressure1_diff.png
+map_d FuelPressure1_diff.png
+
+map_Bump FuelPressure1_nmap.png
+
+map_Ns FuelPressure1_spec.png
+
+newmtl Meshesbmwglasslhlglasslhl0021Mtl
+Material Color
+Ka 0.00258583 0.00258583 0.00258583
+Kd 0.00258583 0.00258583 0.00258583
+Ks 0.00102419 0.00102419 0.00102419 
+
+d 0.4
+
+Ns 0
+
+newmtl L1Mtl
+Material Color
+Ka 0.560499 0.0169881 0.00775103
+Kd 0.560499 0.0169881 0.00775103
+Ks 0.222002 0.0067286 0.00307001 
+
+d 1
+
+Ns 0
+
+newmtl BlackreAmemiya1Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.027451 0.027451 0.027451 
+
+d 1
+
+Ns 0
+
+map_Ka BlackreAmemiya1_diff.png
+map_Kd BlackreAmemiya1_diff.png
+map_d BlackreAmemiya1_diff.png
+
+newmtl A2Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka A2_diff.png
+map_Kd A2_diff.png
+map_d A2_diff.png
+
+newmtl Glass1Mtl
+Material Color
+Ka 0.00258583 0.00258583 0.00258583
+Kd 0.00258583 0.00258583 0.00258583
+Ks 0.00102419 0.00102419 0.00102419 
+
+d 0.301961
+
+Ns 0
+
+newmtl Brakeclutch1Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka Brakeclutch1_diff.png
+map_Kd Brakeclutch1_diff.png
+map_d Brakeclutch1_diff.png
+
+newmtl Engineblock0021Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka Engineblock0021_diff.png
+map_Kd Engineblock0021_diff.png
+map_d Engineblock0021_diff.png
+
+newmtl Text1Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka Text1_diff.png
+map_Kd Text1_diff.png
+map_d Text1_diff.png
+
+newmtl Meshesbnr34interior0211Mtl
+Material Color
+Ka 0.00258583 0.00258583 0.00258583
+Kd 0.00258583 0.00258583 0.00258583
+Ks 0.000223091 0.000223091 0.000223091 
+
+d 1
+
+Ns 255
+
+map_Ka Meshesbnr34interior0211_diff.png
+map_Kd Meshesbnr34interior0211_diff.png
+map_d Meshesbnr34interior0211_diff.png
+
+map_Ns Meshesbnr34interior0211_spec.png
+
+newmtl Meshpart7Mtl
+Material Color
+Ka 0.124741 0.113921 0.121986
+Kd 0.124741 0.113921 0.121986
+Ks 0.0112511 0.0102752 0.0110026 
+
+d 0.301961
+
+Ns 0
+
+newmtl Screen1Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka Screen1_diff.png
+map_Kd Screen1_diff.png
+map_d Screen1_diff.png
+
+newmtl PowermodeButton2Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka PowermodeButton2_diff.png
+map_Kd PowermodeButton2_diff.png
+map_d PowermodeButton2_diff.png
+
+newmtl PowermodeButton1Mtl
+Material Color
+Ka 0.373615 0.368591 0.383775
+Kd 0.373615 0.368591 0.383775
+Ks 0.147981 0.145991 0.152005 
+
+d 1
+
+Ns 0
+
+newmtl Text10Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka Text10_diff.png
+map_Kd Text10_diff.png
+map_d Text10_diff.png
+
+newmtl Meshpart4Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.0392157 0.0392157 0.0392157 
+
+d 1
+
+Ns 0
+
+map_Ka Meshpart4_diff.png
+map_Kd Meshpart4_diff.png
+map_d Meshpart4_diff.png
+
+newmtl Interior2Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.396078 0.396078 0.396078 
+
+d 1
+
+Ns 0
+
+map_Ka Interior2_diff.png
+map_Kd Interior2_diff.png
+map_d Interior2_diff.png
+
+newmtl Meshesbnr34interior0251Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.027451 0.027451 0.027451 
+
+d 1
+
+Ns 0
+
+map_Ka Meshesbnr34interior0251_diff.png
+map_Kd Meshesbnr34interior0251_diff.png
+map_d Meshesbnr34interior0251_diff.png
+
+newmtl C1Mtl
+Material Color
+Ka 0.00258583 0.00258583 0.00258583
+Kd 0.00258583 0.00258583 0.00258583
+Ks 0.00102419 0.00102419 0.00102419 
+
+d 1
+
+Ns 0
+
+newmtl Meshpart3Mtl
+Material Color
+Ka 1 1 1
+Kd 1 1 1
+Ks 0.0392157 0.0392157 0.0392157 
+
+d 1
+
+Ns 0
+
+map_Ka Meshpart3_diff.png
+map_Kd Meshpart3_diff.png
+map_d Meshpart3_diff.png
+
+newmtl Union1Mtl
+Material Color
+Ka 0.373615 0.368591 0.383775
+Kd 0.373615 0.368591 0.383775
+Ks 0.147981 0.145991 0.152005 
+
+d 0.803922
+
+Ns 0
+
+newmtl StarRoof1Mtl
+Material Color
+Ka 0 0.0103978 0.116576
+Kd 0 0.0103978 0.116576
+Ks 0 0.000937841 0.0105147 
+
+d 1
+
+Ns 0
+

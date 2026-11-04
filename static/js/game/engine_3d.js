@@ -1,0 +1,2469 @@
+/**
+ * RACING ZONE - Full 3D WebGL Racing Game Engine (Three.js)
+ * Chase Camera, Real-Life 3D Vehicles, Character On-Foot [E], Multiple Cameras [C], and AI
+ */
+
+class RacingGameEngine3D {
+  constructor(canvasContainerId) {
+    this.container = document.getElementById(canvasContainerId);
+
+    // Three.js Core
+    const w = (this.container && this.container.clientWidth > 0) ? this.container.clientWidth : (window.innerWidth || 1280);
+    const h = (this.container && this.container.clientHeight > 0) ? this.container.clientHeight : (window.innerHeight || 720);
+
+    this.scene = new THREE.Scene();
+    this.camera = new THREE.PerspectiveCamera(65, w / h, 0.2, 2500);
+    this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    this.renderer.setSize(w, h);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.1;
+
+    // Append WebGL canvas
+    if (this.container) {
+      this.container.innerHTML = '';
+      this.container.appendChild(this.renderer.domElement);
+    }
+
+    // Systems
+    this.world = new World3D(this.scene);
+    this.character = new Character3D(this.scene);
+    this.trafficPolice = new TrafficAndPoliceManager(this.scene);
+
+    // 3D Particle FX Group & Shared Pooled Geometries (Prevents GC lag spikes)
+    this.particleGroup = new THREE.Group();
+    this.scene.add(this.particleGroup);
+    this.particles = [];
+
+    this.sharedSmokeGeo = new THREE.PlaneGeometry(0.7, 0.7);
+    this.sharedSmokeGeo.rotateX(-Math.PI / 2);
+    this.sharedSmokeMat = new THREE.MeshBasicMaterial({
+      color: 0xcccccc,
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false
+    });
+
+    this.sharedSparkGeo = new THREE.BoxGeometry(0.08, 0.08, 0.08);
+    this.sharedSparkMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+    this.sharedFireworkGeo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
+
+    // State
+    this.state = 'STOPPED'; // 'COUNTDOWN', 'RACING', 'FINISHED', 'PAUSED'
+    this.cameraMode = 'CHASE'; // 'CHASE', 'HOOD', 'COCKPIT', 'CHARACTER'
+    this.cameraLag = new THREE.Vector3();
+    this.lookLag = new THREE.Vector3();
+
+    // Vehicles
+    this.playerVehicle = null;
+    this.aiVehicles = [];
+    this.allVehicles = [];
+
+    this.countdownTimer = 3.6;
+    this.raceTotalTime = 0;
+    this.totalLaps = 3;
+    this.currentLap = 1;
+    this.bestLapTime = 0;
+    this.currentLapTime = 0;
+    this.lastNearMissTime = 0;
+    this.featTimeout = null;
+    this.nearMissCount = 0;
+    this.maxSpeedRecorded = 0;
+
+    // Advanced Racing Dynamics
+    this.currentDriftScore = 0;
+    this.totalDriftScore = 0;
+    this.isDrafting = false;
+    this.camRoll = 0;
+    this.finishOrbitAngle = 0;
+    this.lastThrottleState = false;
+    this.flamePopTimer = 0;
+    this.rivalTagElements = null;
+    this.crashShake = 0;
+    this.lastCarCrashTime = 0;
+
+    // Inputs
+    this.keys = {
+      up: false, down: false, left: false, right: false,
+      handbrake: false, nitro: false, interact: false, switchCam: false
+    };
+    this.nitroDepleted = false;
+    this.nitroKeysDown = new Set();
+
+    this.lastTime = 0;
+    this.bindInputs();
+    this.handleResize();
+  }
+
+  handleResize() {
+    if (!this.container || !this.renderer || !this.camera) return;
+    const isMobile = window.innerWidth <= 950 || window.innerHeight <= 600;
+    const isRacing = document.body.classList.contains('racing-active');
+    const navHeight = (isMobile && isRacing) ? 0 : (isMobile ? 56 : 72);
+    const w = this.container.clientWidth || window.innerWidth;
+    const h = (isMobile && isRacing) ? window.innerHeight : (this.container.clientHeight || (window.innerHeight - navHeight));
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(w, h);
+
+    const speedCanvas = document.getElementById('speedFxCanvas');
+    if (speedCanvas) {
+      speedCanvas.width = w;
+      speedCanvas.height = h;
+    }
+  }
+
+  bindInputs() {
+    window.addEventListener('keydown', (e) => {
+      const code = e.code || '';
+      const key = e.key ? e.key.toLowerCase() : '';
+
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(code) || ['arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(key)) {
+        e.preventDefault();
+      }
+
+      if (['ArrowUp', 'KeyW'].includes(code) || key === 'arrowup' || key === 'w') {
+        this.keys.up = true;
+        if (this.state === 'COUNTDOWN') this.countdownTimer = 0.1;
+      }
+      if (['ArrowDown', 'KeyS'].includes(code) || key === 'arrowdown' || key === 's') {
+        this.keys.down = true;
+        if (this.state === 'COUNTDOWN') this.countdownTimer = 0.1;
+      }
+      if (['ArrowLeft', 'KeyA'].includes(code) || key === 'arrowleft' || key === 'a') {
+        this.keys.left = true;
+      }
+      if (['ArrowRight', 'KeyD'].includes(code) || key === 'arrowright' || key === 'd') {
+        this.keys.right = true;
+      }
+      if (code === 'Space' || key === ' ' || key === 'space') {
+        this.keys.handbrake = true;
+      }
+      if (['ShiftLeft', 'ShiftRight', 'KeyN'].includes(code) || key === 'shift' || key === 'n') {
+        this.nitroKeysDown.add(code || key);
+        // Only activate nitro if not depleted and has enough charge (>5%)
+        if (!this.nitroDepleted && this.playerVehicle && this.playerVehicle.nitroAmount > 5) {
+          if (!this.keys.nitro && this.playerVehicle.speed > 8 && window.racingAudio && window.racingAudio.playNitroBurst) {
+            window.racingAudio.playNitroBurst();
+          }
+          this.keys.nitro = true;
+          const nitroBtn = document.getElementById('btnNitro');
+          if (nitroBtn) nitroBtn.classList.add('touch-active');
+        }
+        if (this.state === 'COUNTDOWN') this.countdownTimer = 0.1;
+      }
+
+      // Switch Camera [C]
+      if (code === 'KeyC' || key === 'c') {
+        this.toggleCameraMode();
+      }
+
+      // Enter / Exit Vehicle [E]
+      if (code === 'KeyE' || key === 'e') {
+        this.handleVehicleInteract();
+      }
+
+      // Police chase test toggle [P]
+      if (code === 'KeyP' || key === 'p') {
+        const nextWanted = (this.trafficPolice.wantedLevel + 1) % 6;
+        this.trafficPolice.setWantedLevel(nextWanted);
+      }
+
+      // Time of Day toggle [T] (Day / Sunset / Night)
+      if (code === 'KeyT' || key === 't') {
+        this.toggleTimeOfDay();
+      }
+
+      // In-Car GTA Radio toggle [R]
+      if (code === 'KeyR' || key === 'r') {
+        this.toggleRadioStation();
+      }
+
+      // Audio Mute Toggle [M]
+      if (code === 'KeyM' || key === 'm') {
+        if (window.racingApp) window.racingApp.toggleAudio();
+      }
+
+      // Fast Reset / Recover to Track [F]
+      if (code === 'KeyF' || key === 'f') {
+        this.resetPlayerToTrack();
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      const code = e.code || '';
+      const key = e.key ? e.key.toLowerCase() : '';
+
+      if (['ArrowUp', 'KeyW'].includes(code) || key === 'arrowup' || key === 'w') this.keys.up = false;
+      if (['ArrowDown', 'KeyS'].includes(code) || key === 'arrowdown' || key === 's') this.keys.down = false;
+      if (['ArrowLeft', 'KeyA'].includes(code) || key === 'arrowleft' || key === 'a') this.keys.left = false;
+      if (['ArrowRight', 'KeyD'].includes(code) || key === 'arrowright' || key === 'd') this.keys.right = false;
+      if (code === 'Space' || key === ' ' || key === 'space') this.keys.handbrake = false;
+      if (['ShiftLeft', 'ShiftRight', 'KeyN'].includes(code) || key === 'shift' || key === 'n') {
+        this.nitroKeysDown.delete(code || key);
+        if (this.nitroKeysDown.size === 0) {
+          // Releasing key stops nitro boost and clears depletion state, allowing next press/tap
+          this.keys.nitro = false;
+          this.nitroDepleted = false;
+          if (this.playerVehicle) {
+            this.playerVehicle.isNitroActive = false;
+          }
+          const nitroBtn = document.getElementById('btnNitro');
+          if (nitroBtn) nitroBtn.classList.remove('touch-active');
+        }
+      }
+    });
+
+    window.addEventListener('blur', () => {
+      this.nitroKeysDown.clear();
+      this.keys.nitro = false;
+      this.nitroDepleted = false;
+      if (this.playerVehicle) this.playerVehicle.isNitroActive = false;
+      const nitroBtn = document.getElementById('btnNitro');
+      if (nitroBtn) nitroBtn.classList.remove('touch-active');
+    });
+
+    // Window resize & orientation change
+    window.addEventListener('resize', () => this.handleResize());
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => this.handleResize(), 150);
+    });
+
+    // On-Screen Driving Controls (Pointer, Mouse, and Touch)
+    const bindBtn = (id, key, onTap) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      const onPress = (e) => {
+        if (e && e.cancelable) e.preventDefault();
+        if (e) e.stopPropagation();
+        this.keys[key] = true;
+        el.classList.add('touch-active');
+
+        // Immediately launch if countdown is running
+        if (this.state === 'COUNTDOWN') {
+          this.countdownTimer = 0.15;
+        }
+
+        if (onTap) onTap();
+      };
+
+      const onRelease = (e) => {
+        if (e && e.cancelable) e.preventDefault();
+        if (e) e.stopPropagation();
+        this.keys[key] = false;
+        el.classList.remove('touch-active');
+      };
+
+      // Pointer Events (unifies Mouse, Touch & Pen with capture)
+      el.addEventListener('pointerdown', (e) => {
+        try { el.setPointerCapture(e.pointerId); } catch (_) {}
+        onPress(e);
+      });
+      el.addEventListener('pointerup', (e) => {
+        try { el.releasePointerCapture(e.pointerId); } catch (_) {}
+        onRelease(e);
+      });
+      el.addEventListener('pointercancel', onRelease);
+      el.addEventListener('pointerleave', onRelease);
+
+      // Mouse & Touch fallback listeners
+      el.addEventListener('mousedown', onPress);
+      el.addEventListener('mouseup', onRelease);
+      el.addEventListener('mouseleave', onRelease);
+      el.addEventListener('touchstart', onPress, { passive: false });
+      el.addEventListener('touchend', onRelease, { passive: false });
+      el.addEventListener('touchcancel', onRelease, { passive: false });
+
+      // Click fallback for immediate tactile tap
+      el.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (this.state === 'COUNTDOWN') {
+          this.countdownTimer = 0.15;
+        }
+        if (onTap) onTap();
+      });
+    };
+
+    // Immediate forward motion impulse on gas tap
+    bindBtn('btnGas', 'up', () => {
+      if (this.playerVehicle && this.playerVehicle.speed < 24) {
+        this.playerVehicle.speed = Math.max(this.playerVehicle.speed + 16, 22);
+      }
+    });
+
+    // Immediate reverse or hard braking on brake tap
+    bindBtn('btnBrake', 'down', () => {
+      if (this.playerVehicle) {
+        if (this.playerVehicle.speed > 3) {
+          this.playerVehicle.speed = Math.max(0, this.playerVehicle.speed - 18);
+        } else {
+          this.playerVehicle.speed = Math.min(this.playerVehicle.speed - 12, -14);
+        }
+      }
+    });
+
+    // Immediate turn impulse on steer taps
+    bindBtn('btnSteerLeft', 'left', () => {
+      if (this.playerVehicle) {
+        const dir = this.playerVehicle.speed < 0 ? -1 : 1;
+        this.playerVehicle.angle += 0.10 * dir;
+      }
+    });
+
+    bindBtn('btnSteerRight', 'right', () => {
+      if (this.playerVehicle) {
+        const dir = this.playerVehicle.speed < 0 ? -1 : 1;
+        this.playerVehicle.angle -= 0.10 * dir;
+      }
+    });
+
+    // Standalone Mobile / Touch Nitro Button (Hold-to-Boost / Long-Press)
+    const nitroBtn = document.getElementById('btnNitro');
+    if (nitroBtn) {
+      const onNitroPress = (e) => {
+        if (e && e.cancelable) e.preventDefault();
+        if (e) e.stopPropagation();
+
+        if (!this.nitroDepleted && this.playerVehicle && this.playerVehicle.nitroAmount > 5) {
+          this.keys.nitro = true;
+          this.playerVehicle.isNitroActive = true;
+          nitroBtn.classList.add('touch-active');
+          if (this.playerVehicle.speed > 8 && window.racingAudio && window.racingAudio.playNitroBurst) {
+            window.racingAudio.playNitroBurst();
+          }
+        }
+
+        if (this.state === 'COUNTDOWN') {
+          this.countdownTimer = 0.15;
+        }
+      };
+
+      const onNitroRelease = (e) => {
+        if (e && e.cancelable) e.preventDefault();
+        if (e) e.stopPropagation();
+
+        this.keys.nitro = false;
+        this.nitroDepleted = false; // Finger released; clears depleted flag so next tap can activate
+        if (this.playerVehicle) {
+          this.playerVehicle.isNitroActive = false;
+        }
+        nitroBtn.classList.remove('touch-active');
+      };
+
+      nitroBtn.addEventListener('pointerdown', (e) => {
+        try { nitroBtn.setPointerCapture(e.pointerId); } catch (_) {}
+        onNitroPress(e);
+      });
+      nitroBtn.addEventListener('pointerup', (e) => {
+        try { nitroBtn.releasePointerCapture(e.pointerId); } catch (_) {}
+        onNitroRelease(e);
+      });
+      nitroBtn.addEventListener('pointercancel', onNitroRelease);
+      nitroBtn.addEventListener('pointerleave', onNitroRelease);
+
+      nitroBtn.addEventListener('touchstart', onNitroPress, { passive: false });
+      nitroBtn.addEventListener('touchend', onNitroRelease, { passive: false });
+      nitroBtn.addEventListener('touchcancel', onNitroRelease, { passive: false });
+      nitroBtn.addEventListener('mousedown', onNitroPress);
+      nitroBtn.addEventListener('mouseup', onNitroRelease);
+      nitroBtn.addEventListener('mouseleave', onNitroRelease);
+
+      nitroBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+      });
+    }
+
+    bindBtn('btnHandbrake', 'handbrake', () => {
+      if (this.playerVehicle) {
+        this.playerVehicle.isDrifting = true;
+        if (window.racingAudio && window.racingAudio.playTireScreech) {
+          window.racingAudio.playTireScreech();
+        }
+      }
+    });
+
+    this.initMobileSteerModes();
+  }
+
+  initMobileSteerModes() {
+    this.steerControlMode = localStorage.getItem('racing_steer_mode') || 'buttons';
+    this.mobileSteerValue = 0;
+    this.virtualWheelAngle = 0;
+    this.isWheelDragging = false;
+    this.boundOrientationHandler = null;
+
+    // 1. Wire Mode Selector Tabs
+    const tabs = document.querySelectorAll('.steer-mode-tab');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const targetMode = tab.dataset.steerMode;
+        if (targetMode) {
+          this.setSteerControlMode(targetMode);
+        }
+      });
+    });
+
+    // 2. Setup Interactive Virtual Steering Wheel
+    const wheel = document.getElementById('virtualSteeringWheel');
+    if (wheel) {
+      let startX = 0;
+      let startAngle = 0;
+
+      const onWheelDown = (e) => {
+        this.isWheelDragging = true;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        startX = clientX;
+        startAngle = this.virtualWheelAngle || 0;
+        try { wheel.setPointerCapture(e.pointerId); } catch (_) {}
+      };
+
+      const onWheelMove = (e) => {
+        if (!this.isWheelDragging) return;
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const deltaX = clientX - startX;
+        // Map deltaX to rotation angle (-75deg to +75deg)
+        const angle = Math.max(-75, Math.min(75, startAngle + deltaX * 1.2));
+        this.virtualWheelAngle = angle;
+        wheel.style.transform = `rotate(${angle}deg)`;
+        // In engine_3d: left steer is positive (+1), right steer is negative (-1)
+        this.mobileSteerValue = -(angle / 75);
+      };
+
+      const onWheelUp = (e) => {
+        if (!this.isWheelDragging) return;
+        this.isWheelDragging = false;
+        try { wheel.releasePointerCapture(e.pointerId); } catch (_) {}
+        // Spring return to center
+        this.virtualWheelAngle = 0;
+        this.mobileSteerValue = 0;
+        wheel.style.transition = 'transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)';
+        wheel.style.transform = 'rotate(0deg)';
+        setTimeout(() => {
+          wheel.style.transition = '';
+        }, 200);
+      };
+
+      wheel.addEventListener('pointerdown', onWheelDown);
+      window.addEventListener('pointermove', onWheelMove);
+      window.addEventListener('pointerup', onWheelUp);
+      window.addEventListener('pointercancel', onWheelUp);
+
+      // Touch fallback
+      wheel.addEventListener('touchstart', onWheelDown, { passive: false });
+      window.addEventListener('touchmove', onWheelMove, { passive: false });
+      window.addEventListener('touchend', onWheelUp, { passive: false });
+    }
+
+    // Apply saved mode
+    this.setSteerControlMode(this.steerControlMode);
+  }
+
+  setSteerControlMode(mode) {
+    this.steerControlMode = mode;
+    localStorage.setItem('racing_steer_mode', mode);
+
+    // Update active tab UI
+    const tabs = document.querySelectorAll('.steer-mode-tab');
+    tabs.forEach(tab => {
+      tab.classList.toggle('active', tab.dataset.steerMode === mode);
+    });
+
+    const buttonsGroup = document.getElementById('steerButtonsGroup');
+    const wheelGroup = document.getElementById('steerWheelGroup');
+    const tiltGroup = document.getElementById('steerTiltGroup');
+
+    if (buttonsGroup) buttonsGroup.style.display = (mode === 'buttons') ? 'flex' : 'none';
+    if (wheelGroup) wheelGroup.style.display = (mode === 'wheel') ? 'flex' : 'none';
+    if (tiltGroup) tiltGroup.style.display = (mode === 'tilt') ? 'flex' : 'none';
+
+    // Reset steering value
+    this.mobileSteerValue = 0;
+    this.keys.left = false;
+    this.keys.right = false;
+
+    // Handle Tilt Gyro Listener
+    if (mode === 'tilt') {
+      this.enableTiltSteering();
+    } else {
+      this.disableTiltSteering();
+    }
+  }
+
+  enableTiltSteering() {
+    const tiltBubble = document.getElementById('tiltBubble');
+    const tiltAngleVal = document.getElementById('tiltAngleVal');
+    const tiltStatusSub = document.getElementById('tiltStatusSub');
+
+    const handleOrientation = (e) => {
+      if (this.steerControlMode !== 'tilt') return;
+      if (e.beta === null && e.gamma === null) return;
+
+      const orientationAngle = (window.screen && window.screen.orientation) ? window.screen.orientation.angle : (window.orientation || 0);
+      let rawAngle = 0;
+
+      if (orientationAngle === 90) {
+        // Landscape (rotated counter-clockwise)
+        rawAngle = e.beta;
+      } else if (orientationAngle === -90 || orientationAngle === 270) {
+        // Landscape (rotated clockwise)
+        rawAngle = -e.beta;
+      } else {
+        // Portrait (0 or 180 deg)
+        rawAngle = e.gamma;
+      }
+
+      if (rawAngle === null || rawAngle === undefined || isNaN(rawAngle)) return;
+
+      const deadzone = 2.5; // degrees of deadzone
+      const maxAngle = 26;  // degrees for full steering lock
+      let effective = 0;
+
+      if (Math.abs(rawAngle) > deadzone) {
+        const sign = Math.sign(rawAngle);
+        effective = sign * Math.min(maxAngle, Math.abs(rawAngle) - deadzone);
+      }
+
+      // Left steer is positive (+1), right steer is negative (-1)
+      const steerRatio = Math.max(-1, Math.min(1, -(effective / (maxAngle - deadzone))));
+      this.mobileSteerValue = steerRatio;
+
+      // Update HUD Tilt Gauge Feedback
+      if (tiltBubble) {
+        const pct = 50 + (-steerRatio * 42); // 50% is center
+        tiltBubble.style.left = `${Math.max(8, Math.min(92, pct))}%`;
+      }
+      if (tiltAngleVal) {
+        tiltAngleVal.textContent = `${Math.round(rawAngle)}°`;
+      }
+      if (tiltStatusSub) {
+        if (Math.abs(steerRatio) < 0.05) {
+          tiltStatusSub.textContent = 'CENTERED (0%)';
+          tiltStatusSub.style.color = 'var(--text-muted)';
+        } else {
+          const dir = steerRatio > 0 ? '◀ LEFT' : 'RIGHT ▶';
+          const p = Math.round(Math.abs(steerRatio) * 100);
+          tiltStatusSub.textContent = `${dir} ${p}%`;
+          tiltStatusSub.style.color = '#00f0ff';
+        }
+      }
+    };
+
+    // iOS 13+ permission request
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+      DeviceOrientationEvent.requestPermission()
+        .then(response => {
+          if (response === 'granted') {
+            window.addEventListener('deviceorientation', handleOrientation);
+            this.boundOrientationHandler = handleOrientation;
+          } else {
+            if (tiltStatusSub) tiltStatusSub.textContent = 'Permission denied';
+          }
+        })
+        .catch(err => {
+          console.warn('DeviceOrientation error:', err);
+          window.addEventListener('deviceorientation', handleOrientation);
+          this.boundOrientationHandler = handleOrientation;
+        });
+    } else {
+      window.addEventListener('deviceorientation', handleOrientation);
+      this.boundOrientationHandler = handleOrientation;
+    }
+  }
+
+  disableTiltSteering() {
+    if (this.boundOrientationHandler) {
+      window.removeEventListener('deviceorientation', this.boundOrientationHandler);
+      this.boundOrientationHandler = null;
+    }
+    this.mobileSteerValue = 0;
+  }
+
+  toggleCameraMode(targetMode = null) {
+    if (!this.character.isInVehicle) {
+      this.cameraMode = 'CHARACTER';
+      return;
+    }
+    const modes = ['CHASE', 'INTERIOR', 'HOOD'];
+    if (targetMode && modes.includes(targetMode)) {
+      this.cameraMode = (this.cameraMode === targetMode) ? 'CHASE' : targetMode;
+    } else {
+      const currentIdx = modes.indexOf(this.cameraMode);
+      const nextIdx = (currentIdx === -1 ? 0 : (currentIdx + 1) % modes.length);
+      this.cameraMode = modes[nextIdx];
+    }
+
+    const isInterior = this.cameraMode === 'INTERIOR' || this.cameraMode === 'COCKPIT';
+    if (this.camera) {
+      this.camera.near = isInterior ? 0.05 : 0.2;
+      this.camera.updateProjectionMatrix();
+    }
+
+    const camBadge = document.getElementById('cameraModeBadge');
+    if (camBadge) {
+      const labels = {
+        'CHASE': '🏎️ CHASE',
+        'INTERIOR': '💺 INTERIOR',
+        'HOOD': '🚗 HOOD'
+      };
+      camBadge.textContent = labels[this.cameraMode] || this.cameraMode;
+    }
+
+    const cockpitOverlay = document.getElementById('cockpitInteriorOverlay');
+    if (cockpitOverlay) {
+      cockpitOverlay.style.display = isInterior ? 'block' : 'none';
+    }
+  }
+
+  toggleTimeOfDay() {
+    if (!this.trackData) return;
+    const available = this.trackData.availableTimes || ['night', 'day', 'sunset'];
+    const current = this.selectedTimeOfDay || this.trackData.defaultTime || 'night';
+    const nextIdx = (available.indexOf(current) + 1) % available.length;
+    this.selectedTimeOfDay = available[nextIdx];
+    this.world.setupTimeOfDay(this.selectedTimeOfDay, this.trackData.biome);
+    this.updateTimeOfDayHUD();
+  }
+
+  updateTimeOfDayHUD() {
+    const badge = document.getElementById('hudTimeOfDayBadge');
+    if (badge) {
+      const labels = {
+        day: '☀️ DAY',
+        sunset: '🌅 SUNSET',
+        night: '🌙 NIGHT'
+      };
+      const colors = {
+        day: '#00e5ff',
+        sunset: '#ff9800',
+        night: '#ffd600'
+      };
+      badge.textContent = labels[this.selectedTimeOfDay] || '🌙 NIGHT';
+      badge.style.color = colors[this.selectedTimeOfDay] || '#ffd600';
+    }
+  }
+
+  toggleRadioStation() {
+    if (window.racingAudio) {
+      const stationName = window.racingAudio.nextRadioStation();
+      this.showRadioToast(stationName);
+    }
+  }
+
+  showRadioToast(stationName) {
+    let toast = document.getElementById('gtaRadioToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'gtaRadioToast';
+      toast.style.cssText = `
+        position: absolute;
+        top: 4.8rem;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(10, 14, 24, 0.88);
+        border: 1px solid #00f0ff;
+        border-radius: 9999px;
+        padding: 0.5rem 1.4rem;
+        font-size: 0.92rem;
+        font-weight: 800;
+        color: #fff;
+        text-shadow: 0 0 10px #00f0ff;
+        box-shadow: 0 4px 20px rgba(0, 240, 255, 0.35);
+        pointer-events: none;
+        z-index: 100;
+        transition: opacity 0.4s ease, transform 0.4s ease;
+      `;
+      this.container.appendChild(toast);
+    }
+    toast.textContent = stationName;
+    toast.style.opacity = '1';
+    toast.style.transform = 'translateX(-50%) translateY(0)';
+
+    clearTimeout(this.radioToastTimeout);
+    this.radioToastTimeout = setTimeout(() => {
+      toast.style.opacity = '0';
+      toast.style.transform = 'translateX(-50%) translateY(-12px)';
+    }, 2800);
+  }
+
+  showGtaDistrictBanner(title, subtitle) {
+    let banner = document.getElementById('gtaDistrictBanner');
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.id = 'gtaDistrictBanner';
+      banner.style.cssText = `
+        position: absolute;
+        bottom: 5.6rem;
+        left: 50%;
+        transform: translateX(-50%) translateY(0);
+        background: rgba(8, 10, 18, 0.90);
+        border: 1px solid rgba(255, 214, 0, 0.5);
+        border-radius: 8px;
+        padding: 0.35rem 1.4rem;
+        font-family: var(--font-display, sans-serif);
+        pointer-events: none;
+        z-index: 90;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+        text-align: center;
+        transition: opacity 0.5s ease, transform 0.5s ease;
+      `;
+      this.container.appendChild(banner);
+    }
+    banner.innerHTML = `
+      <div style="font-size: 0.65rem; font-weight: 900; letter-spacing: 1.5px; color: #ffd600; text-transform: uppercase;">📍 ${title}</div>
+      <div style="font-size: 0.78rem; font-weight: 700; color: #00f0ff; letter-spacing: 0.5px;">${subtitle || 'San Andreas Highway'}</div>
+    `;
+    banner.style.opacity = '1';
+    banner.style.transform = 'translateX(-50%) translateY(0)';
+
+    clearTimeout(this.gtaDistrictTimeout);
+    this.gtaDistrictTimeout = setTimeout(() => {
+      banner.style.opacity = '0';
+      banner.style.transform = 'translateX(-50%) translateY(10px)';
+    }, 2200);
+  }
+
+  handleVehicleInteract() {
+    if (this.character.isInVehicle) {
+      // Exit vehicle
+      if (Math.abs(this.playerVehicle.speed) < 8) {
+        this.playerVehicle.speed = 0;
+        this.character.exitVehicle(this.playerVehicle);
+        this.cameraMode = 'CHARACTER';
+        this.updateInteractionPrompt(false);
+      }
+    } else {
+      // Check if close to player vehicle or any car
+      const dist = Math.hypot(this.character.x - this.playerVehicle.x, this.character.z - this.playerVehicle.z);
+      if (dist < 4.0) {
+        this.character.enterVehicle(this.playerVehicle);
+        this.cameraMode = 'CHASE';
+        this.updateInteractionPrompt(false);
+      }
+    }
+  }
+
+  setupRace(trackSlug, playerCarConfig, aiCarConfigs, selectedTimeOfDay = null) {
+    this.handleResize();
+    this.trackData = window.RacingTracks[trackSlug] || window.RacingTracks['los-santos'] || window.RacingTracks['vice-city'];
+    this.totalLaps = this.trackData.laps;
+    this.currentLap = 1;
+    this.raceTotalTime = 0;
+    this.bestLapTime = 0;
+    this.currentLapTime = 0;
+
+    // Apply Time of Day preference (day, sunset, night)
+    this.selectedTimeOfDay = selectedTimeOfDay || this.trackData.defaultTime || 'sunset';
+
+    // Build 3D world environment with biome & lighting
+    this.world.buildTrackWorld(this.trackData, this.selectedTimeOfDay);
+    this.updateTimeOfDayHUD();
+
+    // Populate CarX Highway Race Screen Interface (Matching Track Selection Screen)
+    const shieldEl = document.getElementById('hudTrackShieldBadge');
+    if (shieldEl) shieldEl.textContent = this.trackData.highwayCode ? this.trackData.highwayCode.split(' ')[0] : 'ROUTE';
+
+    const codeEl = document.getElementById('hudTrackHighwayCode');
+    if (codeEl) codeEl.textContent = this.trackData.highwayCode || 'INTERSTATE HIGHWAY';
+
+    const nameEl = document.getElementById('hudTrackName');
+    if (nameEl) nameEl.textContent = this.trackData.name;
+
+    const trafficEl = document.getElementById('hudTrafficVal');
+    if (trafficEl) trafficEl.textContent = this.trackData.trafficDensity || 'Heavy (85%)';
+
+    const policeEl = document.getElementById('hudPoliceVal');
+    if (policeEl) policeEl.textContent = this.trackData.policeThreat || '3-Star Patrol';
+
+    const surfaceEl = document.getElementById('hudSurfaceVal');
+    if (surfaceEl) surfaceEl.textContent = this.trackData.surfaceGrip || 'Dry Asphalt 100%';
+
+    this.nearMissCount = 0;
+    this.maxSpeedRecorded = 0;
+
+    // Spawn 3D Civilian Highway Traffic across all lanes
+    this.trafficPolice.initTraffic(this.trackData, 14);
+
+    // Trigger GTA District notification card
+    this.showGtaDistrictBanner(this.trackData.name, this.trackData.district || this.trackData.country);
+
+    // Start GTA in-car radio groove
+    if (window.racingAudio) {
+      window.racingAudio.setRadioStation(1);
+    }
+
+    // Spawn 3D Player Car on circuit grid
+    const scale = 0.5;
+    const startSlot = this.trackData.startGrid[0];
+    const spawnX = (startSlot.x !== undefined) ? (startSlot.z !== undefined ? startSlot.x : (startSlot.x - 1400) * scale) : 0;
+    const spawnZ = (startSlot.z !== undefined) ? startSlot.z : (startSlot.y !== undefined ? (startSlot.y - 1200) * scale : 0);
+
+    const playerMesh = window.CarModels3D.createVehicleMesh(playerCarConfig.slug, playerCarConfig.color || '#f2f2f2', { isPlayer: true });
+    playerMesh.position.set(spawnX, 0.04, spawnZ);
+    playerMesh.rotation.order = 'YXZ';
+    playerMesh.rotation.set(0, startSlot.angle || 0, 0);
+    this.scene.add(playerMesh);
+
+    this.playerVehicle = {
+      mesh: playerMesh,
+      slug: playerCarConfig.slug,
+      name: playerCarConfig.name,
+      x: spawnX,
+      y: 0.04,
+      z: spawnZ,
+      angle: startSlot.angle || 0,
+      pitch: 0,
+      roll: 0,
+      speed: 0,
+      maxSpeed: (playerCarConfig.top_speed_mph || 205) * 0.447, // convert to m/s
+      accel: 22.0,
+      brakeForce: 35.0,
+      handling: (playerCarConfig.handling_score || 90) / 100,
+      steerAngle: 0,
+      isDrifting: false,
+      isNitroActive: false,
+      isAI: false,
+      currentCheckpoint: 1,
+      totalCheckpoints: 0,
+      lap: 1,
+      finishRank: 1
+    };
+
+    // Spawn 3D AI Rival Supercars on circuit grid
+    this.aiVehicles = [];
+    for (let i = 0; i < 3; i++) {
+      const slot = this.trackData.startGrid[i + 1] || startSlot;
+      const cfg = aiCarConfigs[i] || { slug: 'bmw-m3-competition', color: '#1f4068' };
+      const aiMesh = window.CarModels3D.createVehicleMesh(cfg.slug, cfg.color);
+
+      const aiSpawnX = (slot.x !== undefined) ? (slot.z !== undefined ? slot.x : (slot.x - 1400) * scale) : 0;
+      const aiSpawnZ = (slot.z !== undefined) ? slot.z : (slot.y !== undefined ? (slot.y - 1200) * scale : 0);
+      aiMesh.position.set(aiSpawnX, 0.04, aiSpawnZ);
+      aiMesh.rotation.order = 'YXZ';
+      aiMesh.rotation.set(0, slot.angle || 0, 0);
+      this.scene.add(aiMesh);
+
+      const aiVeh = {
+        mesh: aiMesh,
+        slug: cfg.slug,
+        x: aiSpawnX,
+        y: 0.04,
+        z: aiSpawnZ,
+        angle: slot.angle || 0,
+        speed: 0,
+        maxSpeed: (cfg.top_speed_mph || 200) * 0.43,
+        accel: 20.0,
+        isAI: true,
+        currentWpIdx: 1,
+        laneOffset: (i - 1) * 3.5,
+        steerAngle: 0,
+        currentCheckpoint: 1,
+        totalCheckpoints: 0,
+        lap: 1,
+        finishRank: i + 2
+      };
+      this.aiVehicles.push(aiVeh);
+    }
+
+    this.allVehicles = [this.playerVehicle, ...this.aiVehicles];
+
+    // Initialize character inside player car
+    this.character.isInVehicle = true;
+    this.cameraMode = 'CHASE';
+
+    // Start engine audio
+    window.racingAudio.startEngine(playerCarConfig.audio_pitch || 1.0);
+
+    // Ensure camera aspect and renderer dimensions match container
+    const curW = (this.container && this.container.clientWidth > 0) ? this.container.clientWidth : window.innerWidth;
+    const curH = (this.container && this.container.clientHeight > 0) ? this.container.clientHeight : window.innerHeight;
+    this.camera.aspect = curW / curH;
+    this.camera.updateProjectionMatrix();
+    this.renderer.setSize(curW, curH);
+
+    // Initial camera placement behind player car oriented along track angle
+    const initCamDist = 7.0;
+    const initCamH = 2.8;
+    this.cameraLag.set(
+      this.playerVehicle.x - Math.sin(this.playerVehicle.angle) * initCamDist,
+      0.04 + initCamH,
+      this.playerVehicle.z - Math.cos(this.playerVehicle.angle) * initCamDist
+    );
+    this.lookLag.set(
+      this.playerVehicle.x + Math.sin(this.playerVehicle.angle) * 8,
+      0.04 + 1.2,
+      this.playerVehicle.z + Math.cos(this.playerVehicle.angle) * 8
+    );
+    this.camera.up.set(0, 1, 0);
+    this.camera.position.copy(this.cameraLag);
+    this.camera.lookAt(this.lookLag);
+
+    this.state = 'COUNTDOWN';
+    this.countdownTimer = 3.6;
+
+    const cdEl = document.getElementById('countdownOverlay');
+    if (cdEl) cdEl.style.display = 'flex';
+
+    this.lastTime = performance.now();
+    requestAnimationFrame((t) => this.loop(t));
+  }
+
+  loop(currentTime) {
+    const dt = Math.min(0.05, (currentTime - this.lastTime) / 1000);
+    this.lastTime = currentTime;
+
+    try {
+      this.update(dt);
+      this.render();
+    } catch (err) {
+      console.error('Racing engine loop error:', err);
+    }
+
+    if (this.state !== 'STOPPED') {
+      requestAnimationFrame((t) => this.loop(t));
+    }
+  }
+
+  update(dt) {
+    // Keep directional sunlight shadow camera centered on the active car
+    if (this.world && this.world.updateShadowFocus && this.playerVehicle) {
+      this.world.updateShadowFocus(this.playerVehicle);
+    }
+
+    // 1. Countdown Sequence
+    if (this.state === 'COUNTDOWN') {
+      if (this.keys.up || this.keys.down || this.keys.nitro) {
+        this.countdownTimer = Math.min(this.countdownTimer, 0.12);
+      }
+      const prevTimer = Math.ceil(this.countdownTimer);
+      this.countdownTimer -= dt;
+      const currentTimer = Math.ceil(this.countdownTimer);
+
+      const cdNum = document.getElementById('countdownNumber');
+      if (cdNum) {
+        if (this.countdownTimer > 0.6) {
+          cdNum.textContent = currentTimer;
+          if (currentTimer !== prevTimer) window.racingAudio.playCountdownBeep(false);
+        } else {
+          cdNum.textContent = 'GO!';
+          cdNum.style.color = '#00f0ff';
+          if (prevTimer === 1) window.racingAudio.playCountdownBeep(true);
+        }
+      }
+
+      if (this.countdownTimer <= 0) {
+        this.state = 'RACING';
+        const cdEl = document.getElementById('countdownOverlay');
+        if (cdEl) cdEl.style.display = 'none';
+      }
+
+      // Keep vehicles oriented straight down the track and update camera during countdown
+      if (this.playerVehicle && this.playerVehicle.mesh) {
+        this.playerVehicle.mesh.position.set(this.playerVehicle.x, 0.04, this.playerVehicle.z);
+        this.playerVehicle.mesh.rotation.order = 'YXZ';
+        this.playerVehicle.mesh.rotation.set(0, this.playerVehicle.angle, 0);
+      }
+      for (const ai of this.aiVehicles) {
+        if (ai.mesh) {
+          ai.mesh.position.set(ai.x, 0.04, ai.z);
+          ai.mesh.rotation.order = 'YXZ';
+          ai.mesh.rotation.set(0, ai.angle, 0);
+        }
+      }
+      this.updateCamera(dt);
+      return;
+    }
+
+    if (this.state === 'RACING') {
+      this.raceTotalTime += dt;
+      this.currentLapTime += dt;
+
+      // 1. Update 3D World (Snow particles, animated billboards, ambient effects)
+      if (this.world) {
+        this.world.update(dt);
+      }
+
+      // 2. Player Controls & 3D Physics
+      if (this.character.isInVehicle) {
+        this.updatePlayerCar(dt);
+      } else {
+        // Character on foot
+        this.character.update(dt, this.keys, this.camera.rotation.y);
+
+        // Check distance to car for Enter prompt
+        const distToCar = Math.hypot(this.character.x - this.playerVehicle.x, this.character.z - this.playerVehicle.z);
+        this.updateInteractionPrompt(distToCar < 3.8);
+      }
+
+      // 3. Update AI Rival Vehicles in 3D
+      this.updateAIVehicles(dt);
+
+      // 4. Update Traffic & Police Pursuit System
+      const pX = this.character.isInVehicle ? this.playerVehicle.x : this.character.x;
+      const pZ = this.character.isInVehicle ? this.playerVehicle.z : this.character.z;
+      this.trafficPolice.update(dt, pX, pZ, this.playerVehicle.speed, this.trackData);
+
+      // 4.5 Multi-Vehicle Solid Collision & Momentum Transfer
+      this.handleVehicleCollisions(dt);
+
+      // 5. Update Camera
+      this.updateCamera(dt);
+
+      // 6. Checkpoints & Laps
+      this.updateCheckpoints();
+
+      // 6.2 Compute Real-Time Race Positions
+      this.updateRacePositions();
+
+      // 6.5 CarX Near-Miss & High-Speed Combos
+      this.checkNearMisses(dt);
+
+      // 7. Update Particles (Smoke, Sparks, Fireworks)
+      this.updateParticles(dt);
+
+      // 8. Update HUD & Gauges
+      this.updateHUD(dt);
+
+      // 9. Race Finish Check
+      if (this.playerVehicle.lap > this.totalLaps) {
+        this.state = 'FINISHED';
+        window.racingAudio.stopTireScreech();
+        window.racingAudio.playVictoryFanfare();
+        this.spawnVictoryFireworks();
+
+        if (window.onRaceFinished) {
+          window.onRaceFinished({
+            finishPosition: this.playerVehicle.finishRank,
+            raceTime: this.raceTotalTime,
+            bestLapTime: this.bestLapTime || this.raceTotalTime / this.totalLaps,
+            topSpeed: Math.round(this.playerVehicle.speed * 2.237),
+            trackSlug: this.trackData.slug,
+            carSlug: this.playerVehicle.slug
+          });
+        }
+      }
+    } else if (this.state === 'FINISHED') {
+      // Cinematic 360-degree Victory Orbit Camera
+      this.finishOrbitAngle = (this.finishOrbitAngle || 0) + dt * 0.7;
+      const orbitDist = 9.0;
+      this.camera.position.set(
+        this.playerVehicle.x + Math.sin(this.finishOrbitAngle) * orbitDist,
+        2.8,
+        this.playerVehicle.z + Math.cos(this.finishOrbitAngle) * orbitDist
+      );
+      this.camera.lookAt(this.playerVehicle.x, 1.2, this.playerVehicle.z);
+
+      // Smooth deceleration
+      this.playerVehicle.speed *= Math.pow(0.96, dt * 60);
+      this.playerVehicle.x += Math.sin(this.playerVehicle.angle) * this.playerVehicle.speed * dt;
+      this.playerVehicle.z += Math.cos(this.playerVehicle.angle) * this.playerVehicle.speed * dt;
+      this.playerVehicle.mesh.position.set(this.playerVehicle.x, 0, this.playerVehicle.z);
+
+      this.updateParticles(dt);
+      if (Math.random() < 0.1) this.spawnVictoryFireworks();
+    }
+  }
+
+  updatePlayerCar(dt) {
+    const car = this.playerVehicle;
+
+    // 1. Nitro Boost & Exhaust Flames (Hold-to-Boost; never auto-fires on refill)
+    const canUseNitro = this.keys.nitro && !this.nitroDepleted && car.nitroAmount > 0 && car.speed > 8;
+    if (canUseNitro) {
+      car.isNitroActive = true;
+      car.nitroAmount = Math.max(0, car.nitroAmount - dt * 28);
+      if (car.nitroAmount <= 0) {
+        // Tank emptied completely; deactivate and mark depleted so it won't auto-activate when refilling
+        car.nitroAmount = 0;
+        car.isNitroActive = false;
+        this.keys.nitro = false;
+        this.nitroDepleted = true;
+        const nitroBtn = document.getElementById('btnNitro');
+        if (nitroBtn) nitroBtn.classList.remove('touch-active');
+      }
+      if (window.racingAudio && window.racingAudio.playNitroSound) {
+        window.racingAudio.playNitroSound();
+      }
+    } else {
+      car.isNitroActive = false;
+      // Refill nitro passively up to 100% - requires new press/tap to activate again
+      car.nitroAmount = Math.min(100, car.nitroAmount + dt * 5.5);
+    }
+
+    // Throttle Lift Exhaust Backfire Detection
+    const speedMph = Math.round(Math.abs(car.speed) * 2.237);
+    if (this.lastThrottleState && !this.keys.up && speedMph > 40) {
+      this.flamePopTimer = 0.18;
+      if (window.racingAudio && window.racingAudio.playExhaustPop) {
+        window.racingAudio.playExhaustPop();
+      }
+    }
+    this.lastThrottleState = this.keys.up;
+
+    if (this.flamePopTimer > 0) {
+      this.flamePopTimer -= dt;
+    }
+
+    // Animate Exhaust Flame Cones
+    if (car.mesh.userData && car.mesh.userData.nitroFlames) {
+      const showFlames = car.isNitroActive || this.flamePopTimer > 0;
+      car.mesh.userData.nitroFlames.forEach(flame => {
+        flame.visible = showFlames;
+        if (showFlames) {
+          const s = 1.0 + Math.random() * 0.5;
+          flame.scale.set(s, s, s * (car.isNitroActive ? 1.7 : 0.85));
+        }
+      });
+    }
+
+    // 2. Aerodynamic Slipstream / Drafting Surge
+    let isDraftingNow = false;
+    const forwardX = Math.sin(car.angle);
+    const forwardZ = Math.cos(car.angle);
+    const potentialLeaders = [...this.aiVehicles, ...(this.trafficPolice ? this.trafficPolice.trafficCars : [])];
+
+    for (const leader of potentialLeaders) {
+      const dx = leader.x - car.x;
+      const dz = leader.z - car.z;
+      const dist = Math.hypot(dx, dz);
+
+      if (dist > 5.5 && dist < 24.0) {
+        const dirX = dx / dist;
+        const dirZ = dz / dist;
+        const dot = dirX * forwardX + dirZ * forwardZ;
+        if (dot > 0.86) {
+          isDraftingNow = true;
+          car.speed += 14.0 * dt; // Extra acceleration surge from slipstream!
+          break;
+        }
+      }
+    }
+
+    if (isDraftingNow) {
+      if (!this.isDrafting) {
+        this.isDrafting = true;
+        if (window.racingAudio && window.racingAudio.playDraftingSound) {
+          window.racingAudio.playDraftingSound();
+        }
+        this.triggerCarxFeat('💨 SLIPSTREAM DRAFT!', 100);
+      }
+    } else {
+      this.isDrafting = false;
+    }
+
+    const nitroMult = car.isNitroActive ? 1.45 : (this.isDrafting ? 1.15 : 1.0);
+    const maxSpd = car.maxSpeed * (car.isNitroActive ? 1.25 : (this.isDrafting ? 1.1 : 1.0));
+
+    // 3. Throttle & Braking
+    if (this.keys.up) {
+      if (car.speed < maxSpd) {
+        car.speed += car.accel * nitroMult * dt;
+      }
+    } else if (this.keys.down) {
+      if (car.speed > 1.2) {
+        car.speed -= car.brakeForce * dt; // strong braking
+      } else {
+        // High-torque responsive reverse power
+        car.speed = Math.max(-25, car.speed - 28 * dt);
+      }
+    } else {
+      car.speed *= Math.pow(0.985, dt * 60); // rolling friction
+    }
+
+    // Taillight Brake Glow Intensity
+    if (car.mesh.userData && car.mesh.userData.brakeMat) {
+      if (this.keys.down && car.speed > 0) {
+        car.mesh.userData.brakeMat.color.setHex(0xff0022);
+      } else {
+        car.mesh.userData.brakeMat.color.setHex(0x550011);
+      }
+    }
+
+    // 4. Steering & Dynamic Drift Physics (Buttons, Virtual Wheel, and Tilt Gyro)
+    let steerInput = 0;
+    if (Math.abs(this.mobileSteerValue || 0) > 0.01) {
+      steerInput = this.mobileSteerValue; // Analog steering from Virtual Wheel or Tilt Gyro
+    } else {
+      if (this.keys.left) steerInput += 1;  // Left steering turns car left on screen
+      if (this.keys.right) steerInput -= 1; // Right steering turns car right on screen
+    }
+
+    car.steerAngle = steerInput * 0.45;
+
+    if (Math.abs(car.speed) > 0.1) {
+      const isReversing = car.speed < 0;
+      // Responsive handling: agile at low speeds, stable with drift capability at high speeds
+      const speedFactor = isReversing ? 1.0 : Math.max(0.55, Math.min(1.25, Math.abs(car.speed) / 10));
+      let steerRate = steerInput * (car.handling * 2.8) * speedFactor * (isReversing ? -1 : 1);
+
+      if (this.keys.handbrake) {
+        steerRate *= 1.85;
+        car.isDrifting = Math.abs(car.speed) > 12;
+      } else {
+        car.isDrifting = Math.abs(steerInput) > 0 && Math.abs(car.speed) > 30;
+      }
+
+      car.angle += steerRate * dt;
+    } else {
+      car.isDrifting = false;
+    }
+
+    // 5. Dynamic Drift Scoring & Tire Smoke Particles
+    const driftBox = document.getElementById('hudDriftScoreBox');
+    const driftVal = document.getElementById('hudDriftScoreVal');
+
+    if (car.isDrifting && speedMph > 22) {
+      this.currentDriftScore = (this.currentDriftScore || 0) + Math.round(speedMph * dt * 8);
+      if (driftBox && driftVal) {
+        driftBox.style.display = 'flex';
+        driftVal.textContent = `${this.currentDriftScore} PTS`;
+      }
+      this.spawnTireSmoke(car);
+    } else {
+      if (this.currentDriftScore > 200) {
+        const bonus = Math.round(this.currentDriftScore / 2);
+        this.triggerCarxFeat(`⚡ DRIFT KING +$${bonus}`, bonus);
+      }
+      this.currentDriftScore = 0;
+      if (driftBox) driftBox.style.display = 'none';
+    }
+
+    // Move forward
+    car.x += Math.sin(car.angle) * car.speed * dt;
+    car.z += Math.cos(car.angle) * car.speed * dt;
+
+    // 6. Realistic Suspension Dynamics (Weight Transfer Pitch & Body Roll)
+    const speedRatio = Math.min(1.0, Math.abs(car.speed) / 22);
+    const targetRoll = -steerInput * speedRatio * 0.075;
+
+    let targetPitch = 0;
+    if (this.keys.up && car.speed > 0) {
+      targetPitch = 0.035; // rear squat under hard acceleration
+    } else if (this.keys.down && car.speed > 2) {
+      targetPitch = -0.048; // front nose dive under heavy braking
+    }
+
+    car.pitch = (car.pitch || 0) + (targetPitch - (car.pitch || 0)) * dt * 9;
+    car.roll = (car.roll || 0) + (targetRoll - (car.roll || 0)) * dt * 10;
+
+    // 7. Building Collision Pushback & Wall Sparks
+    if (this.world && this.world.buildingColliders) {
+      for (const col of this.world.buildingColliders) {
+        const dx = car.x - col.x;
+        const dz = car.z - col.z;
+        const dist = Math.hypot(dx, dz);
+        const minDist = col.radius + 2.5;
+        if (dist < minDist && dist > 0.001) {
+          const overlap = minDist - dist;
+          const nx = dx / dist;
+          const nz = dz / dist;
+          car.x += nx * overlap * 1.05;
+          car.z += nz * overlap * 1.05;
+          this.spawnSparks(car.x, 0.4, car.z, nx, nz);
+
+          // Head-on crash vs glancing barrier scrape
+          const headingDot = (Math.sin(car.angle) * nx + Math.cos(car.angle) * nz);
+          if (headingDot < -0.35 && car.speed > 8) {
+            car.speed = -Math.min(4, car.speed * 0.18); // slight rebound on head-on hit
+            if (window.racingAudio && window.racingAudio.playCrashSound) {
+              window.racingAudio.playCrashSound();
+            }
+          } else {
+            // Glancing scrape against barrier - maintain forward drive with wall friction
+            car.speed = Math.max(0, car.speed * 0.95);
+          }
+        }
+      }
+    }
+
+    // 8. Vehicle-to-Vehicle Solid Collision & Dynamics
+    this.handleVehicleCollisions(dt);
+
+    // Update 3D mesh position and suspension angles
+    car.mesh.position.set(car.x, 0.04, car.z);
+    car.mesh.rotation.order = 'YXZ';
+    car.mesh.rotation.set(car.pitch || 0, car.angle, car.roll || 0);
+
+    // Wheels rotation & steering
+    if (car.mesh.userData && car.mesh.userData.wheels) {
+      const rollRate = (car.speed / 0.34) * dt;
+      const w = car.mesh.userData.wheels;
+      w.fl.roll.rotation.x += rollRate;
+      w.fr.roll.rotation.x += rollRate;
+      w.rl.roll.rotation.x += rollRate;
+      w.rr.roll.rotation.x += rollRate;
+
+      w.fl.hub.rotation.y = car.steerAngle;
+      w.fr.hub.rotation.y = car.steerAngle;
+    }
+
+    // Dynamic Brake Lights (intensifies during braking or drifting)
+    if (car.mesh.userData && car.mesh.userData.brakeGlow) {
+      const isBraking = this.keys.down || car.isDrifting;
+      car.mesh.userData.brakeGlow.intensity = isBraking ? 2.8 : 0.6;
+      if (car.mesh.userData.brakeMat) {
+        car.mesh.userData.brakeMat.color.setHex(isBraking ? 0xff1122 : 0x770011);
+      }
+    }
+
+    // Dynamic Nitro Flame Exhaust Cones
+    if (car.mesh.userData && car.mesh.userData.nitroFlames) {
+      const isNitro = car.isNitroActive;
+      car.mesh.userData.nitroFlames.forEach(flame => {
+        flame.visible = isNitro;
+        if (isNitro) {
+          const s = 0.85 + Math.random() * 0.35;
+          flame.scale.set(s, s, s);
+        }
+      });
+    }
+
+    // Audio Engine
+    const rpmRatio = (speedMph % 45) / 45;
+    window.racingAudio.updateEngine(rpmRatio, this.keys.up, speedMph / 200);
+
+    if (car.isDrifting) {
+      window.racingAudio.playTireScreech(0.7);
+    } else {
+      window.racingAudio.stopTireScreech();
+    }
+  }
+
+  updateAIVehicles(dt) {
+    const scale = 0.5;
+    const wps = this.trackData.waypoints;
+
+    for (const ai of this.aiVehicles) {
+      const targetWp = wps[ai.currentWpIdx];
+      const targetX = (targetWp.z !== undefined) ? targetWp.x : (targetWp.x - 1400) * scale;
+      const targetZ = (targetWp.z !== undefined) ? targetWp.z : (targetWp.y - 1200) * scale;
+
+      const dx = targetX - ai.x;
+      const dz = targetZ - ai.z;
+      const dist = Math.hypot(dx, dz);
+
+      if (dist < 25) {
+        const hitWp = ai.currentWpIdx;
+        ai.currentWpIdx = (ai.currentWpIdx + 1) % wps.length;
+        ai.currentCheckpoint = ai.currentWpIdx;
+        ai.totalCheckpoints = (ai.totalCheckpoints || 0) + 1;
+        if (hitWp === 0 && ai.totalCheckpoints >= wps.length - 1) {
+          ai.lap = (ai.lap || 1) + 1;
+        }
+      }
+
+      const targetAngle = Math.atan2(dx, dz);
+      let angleDiff = targetAngle - ai.angle;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+      ai.angle += angleDiff * Math.min(1.0, dt * 3.2);
+
+      if (ai.speed < ai.maxSpeed) {
+        ai.speed += ai.accel * dt;
+      }
+
+      ai.x += Math.sin(ai.angle) * ai.speed * dt;
+      ai.z += Math.cos(ai.angle) * ai.speed * dt;
+
+      ai.mesh.position.set(ai.x, 0.04, ai.z);
+      ai.mesh.rotation.order = 'YXZ';
+      ai.mesh.rotation.set(0, ai.angle, 0);
+
+      // Wheel animations
+      if (ai.mesh.userData && ai.mesh.userData.wheels) {
+        const rollRate = (ai.speed / 0.34) * dt;
+        const w = ai.mesh.userData.wheels;
+        w.fl.roll.rotation.x += rollRate;
+        w.fr.roll.rotation.x += rollRate;
+        w.rl.roll.rotation.x += rollRate;
+        w.rr.roll.rotation.x += rollRate;
+        w.fl.hub.rotation.y = -angleDiff * 0.4;
+        w.fr.hub.rotation.y = -angleDiff * 0.4;
+      }
+    }
+  }
+
+  // ==========================================================================
+  // Realistic Multi-Sphere Vehicle Physics & Solid Collision Resolution
+  // ==========================================================================
+
+  getVehicleCollisionSpheres(veh) {
+    const angle = veh.angle || 0;
+    const sinA = Math.sin(angle);
+    const cosA = Math.cos(angle);
+    const x = veh.x || 0;
+    const z = veh.z || 0;
+    const radius = 1.05; // 2.10m total body width coverage
+
+    return [
+      { x: x + sinA * 1.35, z: z + cosA * 1.35, r: radius, type: 'front' },
+      { x: x,               z: z,               r: radius, type: 'center' },
+      { x: x - sinA * 1.35, z: z - cosA * 1.35, r: radius, type: 'rear' }
+    ];
+  }
+
+  resolveVehiclePairCollision(carA, carB, isPlayerA = true) {
+    if (!carA || !carB) return false;
+    const spheresA = this.getVehicleCollisionSpheres(carA);
+    const spheresB = this.getVehicleCollisionSpheres(carB);
+
+    let minDistance = 9999;
+    let closestPair = null;
+
+    for (let i = 0; i < spheresA.length; i++) {
+      for (let j = 0; j < spheresB.length; j++) {
+        const sA = spheresA[i];
+        const sB = spheresB[j];
+        const dx = sA.x - sB.x;
+        const dz = sA.z - sB.z;
+        const dist = Math.hypot(dx, dz);
+        const minDist = sA.r + sB.r; // 2.10m contact threshold
+
+        if (dist < minDist && dist < minDistance) {
+          minDistance = dist;
+          closestPair = { sA, sB, dx, dz, dist, minDist };
+        }
+      }
+    }
+
+    if (!closestPair) return false;
+
+    // Contact detected!
+    const { sA, sB, dx, dz, dist, minDist } = closestPair;
+    const overlap = Math.max(0.02, minDist - dist);
+    let nx = dist > 0.001 ? (dx / dist) : Math.sin(carA.angle || 0);
+    let nz = dist > 0.001 ? (dz / dist) : Math.cos(carA.angle || 0);
+
+    // 1. Position Separation: 100% prevent body penetration / mesh clipping
+    const sepA = isPlayerA ? 0.42 : 0.5;
+    const sepB = isPlayerA ? 0.68 : 0.5;
+
+    carA.x += nx * overlap * sepA;
+    carA.z += nz * overlap * sepA;
+    carB.x -= nx * overlap * sepB;
+    carB.z -= nz * overlap * sepB;
+
+    if (carA.mesh) carA.mesh.position.set(carA.x, 0.04, carA.z);
+    if (carB.mesh) carB.mesh.position.set(carB.x, 0.04, carB.z);
+
+    // 2. Velocity & Momentum Transfer (Eliminates car getting stuck!)
+    const spdA = carA.speed || 0;
+    const spdB = carB.speed || 0;
+    const angA = carA.angle || 0;
+    const angB = carB.angle || 0;
+
+    const vAx = Math.sin(angA) * spdA;
+    const vAz = Math.cos(angA) * spdA;
+    const vBx = Math.sin(angB) * spdB;
+    const vBz = Math.cos(angB) * spdB;
+
+    // Relative velocity of A with respect to B along collision normal
+    const vRelX = vAx - vBx;
+    const vRelZ = vAz - vBz;
+    const vNormal = vRelX * nx + vRelZ * nz;
+
+    // Forward direction of car A
+    const fAx = Math.sin(angA);
+    const fAz = Math.cos(angA);
+    const toBDx = carB.x - carA.x;
+    const toBDz = carB.z - carA.z;
+    const isAhead = (fAx * toBDx + fAz * toBDz) > 0;
+
+    if (isAhead && spdA > spdB) {
+      // Rear-end or ramming: Car A hits Car B from behind
+      // B gets pushed forward and accelerates away realistically
+      const shoveSpeed = Math.max(spdB + 7.0, spdA * 0.88 + 4.0);
+      carB.speed = shoveSpeed;
+      carB.x += Math.sin(carB.angle || angA) * 2.6;
+      carB.z += Math.cos(carB.angle || angA) * 2.6;
+      if (carB.mesh) carB.mesh.position.set(carB.x, 0.04, carB.z);
+
+      // If civilian traffic, nudge lane so it yields / swerves out of the way
+      if (carB.laneOffset !== undefined) {
+        const laneShift = (nx > 0 ? -2.4 : 2.4);
+        carB.laneOffset = Math.max(-12, Math.min(12, carB.laneOffset + laneShift));
+      }
+
+      // Player car A maintains forward drive without dropping to 0 or getting stuck
+      const speedScrub = Math.min(4.5, Math.max(1.0, Math.abs(vNormal) * 0.22));
+      carA.speed = Math.max(16.0, spdA - speedScrub);
+
+      // Deflect car angle slightly
+      const steerTorque = (nx * Math.cos(angA) - nz * Math.sin(angA));
+      carA.angle += steerTorque * 0.025;
+    } else if (vNormal < -0.3) {
+      // Head-on or high-speed head closing collision
+      carA.speed = -Math.min(5.0, Math.max(2.0, spdA * 0.2));
+      carB.speed = -Math.min(5.0, Math.max(2.0, spdB * 0.2));
+    } else {
+      // Glancing side scrape: maintain forward drive with minimal friction
+      carA.speed = Math.max(12.0, spdA * 0.96);
+      carB.speed = Math.max(12.0, spdB * 0.96);
+      const steerTorque = (nx * Math.cos(angA) - nz * Math.sin(angA));
+      carA.angle += steerTorque * 0.03;
+    }
+
+    // 3. Contact Sparks, Crash Sound, and Impact Rumble
+    const contactX = (sA.x + sB.x) / 2;
+    const contactZ = (sA.z + sB.z) / 2;
+    this.spawnSparks(contactX, 0.5, contactZ, nx, nz);
+
+    if (isPlayerA) {
+      const now = performance.now();
+      if (!this.lastCarCrashTime || (now - this.lastCarCrashTime) > 200) {
+        this.lastCarCrashTime = now;
+        if (window.racingAudio && window.racingAudio.playCrashSound) {
+          window.racingAudio.playCrashSound();
+        }
+      }
+      this.crashShake = Math.min(0.3, (this.crashShake || 0) + 0.14);
+    }
+
+    return true;
+  }
+
+  handleVehicleCollisions(dt) {
+    if (!this.playerVehicle) return;
+    const player = this.playerVehicle;
+
+    // 1. Player vs. Civilian Traffic Cars
+    if (this.trafficPolice && this.trafficPolice.trafficCars) {
+      for (const tCar of this.trafficPolice.trafficCars) {
+        this.resolveVehiclePairCollision(player, tCar, true);
+      }
+    }
+
+    // 2. Player vs. Police Cruisers
+    if (this.trafficPolice && this.trafficPolice.policeCruisers) {
+      for (const cop of this.trafficPolice.policeCruisers) {
+        this.resolveVehiclePairCollision(player, cop, true);
+      }
+    }
+
+    // 3. Player vs. AI Rival Vehicles
+    if (this.aiVehicles && this.aiVehicles.length > 0) {
+      for (const ai of this.aiVehicles) {
+        this.resolveVehiclePairCollision(player, ai, true);
+      }
+    }
+
+    // 4. AI Rivals vs. Civilian Traffic Cars (prevents AI ghosting through traffic)
+    if (this.aiVehicles && this.trafficPolice && this.trafficPolice.trafficCars) {
+      for (const ai of this.aiVehicles) {
+        for (const tCar of this.trafficPolice.trafficCars) {
+          const dCenter = Math.hypot(ai.x - tCar.x, ai.z - tCar.z);
+          if (dCenter < 6.0) {
+            this.resolveVehiclePairCollision(ai, tCar, false);
+          }
+        }
+      }
+    }
+  }
+
+  updateCamera(dt) {
+    const car = this.playerVehicle;
+
+    if (this.cameraMode === 'CHARACTER') {
+      // Third-person camera following on-foot player
+      const targetCam = new THREE.Vector3(
+        this.character.x - Math.sin(this.character.yaw) * 4.5,
+        this.character.y + 2.5,
+        this.character.z - Math.cos(this.character.yaw) * 4.5
+      );
+      this.camera.position.lerp(targetCam, dt * 8);
+      this.camera.lookAt(this.character.x, this.character.y + 1.4, this.character.z);
+      return;
+    }
+
+    if (this.cameraMode === 'HOOD') {
+      // Front hood camera
+      this.camera.position.set(
+        car.x + Math.sin(car.angle) * 1.4,
+        0.95,
+        car.z + Math.cos(car.angle) * 1.4
+      );
+      this.camera.lookAt(
+        car.x + Math.sin(car.angle) * 40,
+        0.8,
+        car.z + Math.cos(car.angle) * 40
+      );
+      this.camera.up.set(0, 1, 0);
+    } else if (this.cameraMode === 'INTERIOR' || this.cameraMode === 'COCKPIT') {
+      // Realistic Driver Cockpit Interior View (left-side driver seat, eye-level)
+      const fX = Math.sin(car.angle);
+      const fZ = Math.cos(car.angle);
+      const rX = -Math.cos(car.angle); // right vector
+      const rZ = Math.sin(car.angle);
+
+      // Driver seated at -0.35m left of center, -0.10m back from center
+      const seatX = -rX * 0.35 - fX * 0.10;
+      const seatZ = -rZ * 0.35 - fZ * 0.10;
+      const eyeHeight = 1.04;
+
+      this.camera.position.set(
+        car.x + seatX,
+        eyeHeight,
+        car.z + seatZ
+      );
+
+      // Look ahead through windshield over the hood
+      const lookDist = 45;
+      const lookX = car.x + seatX + fX * lookDist;
+      const lookY = eyeHeight - 0.02 + (car.pitch || 0) * 1.3;
+      const lookZ = car.z + seatZ + fZ * lookDist;
+
+      this.camera.lookAt(lookX, lookY, lookZ);
+
+      // Cockpit banking roll for G-force immersion
+      this.camera.up.set(rX * (car.roll || 0) * 1.4, 1, rZ * (car.roll || 0) * 1.4);
+    } else {
+      // Dynamic Chase Camera [CHASE] (With banking roll & speed rumble)
+      const speedMph = Math.round(Math.abs(car.speed) * 2.237);
+      const speedPct = Math.abs(car.speed) / car.maxSpeed;
+      const followDist = 7.0 + speedPct * 2.5;
+      const followHeight = 2.8 + speedPct * 0.4;
+
+      const targetCam = new THREE.Vector3(
+        car.x - Math.sin(car.angle) * followDist,
+        car.y + followHeight,
+        car.z - Math.cos(car.angle) * followDist
+      );
+
+      const lookTarget = new THREE.Vector3(
+        car.x + Math.sin(car.angle) * 8,
+        car.y + 1.2,
+        car.z + Math.cos(car.angle) * 8
+      );
+
+      this.cameraLag.lerp(targetCam, dt * 7.5);
+      this.lookLag.lerp(lookTarget, dt * 10);
+
+      this.camera.up.set(0, 1, 0);
+      this.camera.position.copy(this.cameraLag);
+      this.camera.lookAt(this.lookLag);
+
+      // High Speed Camera Rumble / Vibration (lateral micro-jitter)
+      if (speedMph > 85) {
+        const shake = Math.min(0.025, ((speedMph - 85) / 115) * 0.02);
+        this.camera.position.x += (Math.random() - 0.5) * shake;
+        this.camera.position.y += (Math.random() - 0.5) * shake;
+      }
+
+      // Crash Impact Camera Shake
+      if (this.crashShake > 0.001) {
+        this.camera.position.x += (Math.random() - 0.5) * this.crashShake;
+        this.camera.position.y += (Math.random() - 0.5) * this.crashShake * 0.7;
+        this.crashShake = Math.max(0, this.crashShake - dt * 2.2);
+      }
+
+      // FOV expands dynamically on nitro rush!
+      const targetFOV = car.isNitroActive ? 86 : (65 + speedPct * 9);
+      this.camera.fov += (targetFOV - this.camera.fov) * (dt * 7);
+      this.camera.updateProjectionMatrix();
+    }
+  }
+
+  updateCheckpoints() {
+    const scale = 0.5;
+    const wps = this.trackData.waypoints;
+    const targetWp = wps[this.playerVehicle.currentCheckpoint];
+    if (!targetWp) return;
+    const gx = (targetWp.z !== undefined) ? targetWp.x : (targetWp.x - 1400) * scale;
+    const gz = (targetWp.z !== undefined) ? targetWp.z : (targetWp.y - 1200) * scale;
+
+    const dist = Math.hypot(this.playerVehicle.x - gx, this.playerVehicle.z - gz);
+    if (dist < 32) {
+      const hitWp = this.playerVehicle.currentCheckpoint;
+      this.world.flashCheckpoint(this.playerVehicle.currentCheckpoint);
+      this.playerVehicle.currentCheckpoint = (this.playerVehicle.currentCheckpoint + 1) % wps.length;
+      this.playerVehicle.totalCheckpoints++;
+
+      if (hitWp === 0 && this.playerVehicle.totalCheckpoints >= wps.length - 1) {
+        if (this.bestLapTime === 0 || this.currentLapTime < this.bestLapTime) {
+          this.bestLapTime = this.currentLapTime;
+        }
+        this.playerVehicle.lap++;
+        this.currentLap = this.playerVehicle.lap;
+        this.currentLapTime = 0;
+      }
+    }
+  }
+
+  updateRacePositions() {
+    if (!this.playerVehicle || !this.allVehicles || !this.trackData || !this.trackData.waypoints) return;
+    const wps = this.trackData.waypoints;
+    const scale = 0.5;
+
+    for (const veh of this.allVehicles) {
+      const nextIdx = veh.isAI ? (veh.currentWpIdx || 0) : (veh.currentCheckpoint || 0);
+      const targetWp = wps[nextIdx] || wps[0];
+      const gx = (targetWp.z !== undefined) ? targetWp.x : (targetWp.x - 1400) * scale;
+      const gz = (targetWp.z !== undefined) ? targetWp.z : (targetWp.y - 1200) * scale;
+
+      const prevIdx = (nextIdx - 1 + wps.length) % wps.length;
+      const prevWp = wps[prevIdx] || wps[0];
+      const px = (prevWp.z !== undefined) ? prevWp.x : (prevWp.x - 1400) * scale;
+      const pz = (prevWp.z !== undefined) ? prevWp.z : (prevWp.y - 1200) * scale;
+
+      const segLen = Math.hypot(gx - px, gz - pz) || 100;
+      const distToNext = Math.hypot(veh.x - gx, veh.z - gz);
+      const frac = Math.max(0, Math.min(1, 1 - (distToNext / segLen)));
+
+      veh.raceScore = ((veh.totalCheckpoints || 0) * 1000) + (frac * 1000);
+    }
+
+    const sorted = [...this.allVehicles].sort((a, b) => (b.raceScore || 0) - (a.raceScore || 0));
+    sorted.forEach((veh, idx) => {
+      veh.finishRank = idx + 1;
+    });
+  }
+
+  updateHUD(dt = 0.016) {
+    if (!this.playerVehicle) return;
+    const speedMph = Math.round(Math.abs(this.playerVehicle.speed) * 2.237);
+
+    // Gear computation (N, G1 to G6)
+    let currentGear = 'N';
+    if (speedMph < 2) currentGear = 'N';
+    else if (speedMph < 35) currentGear = 'G1';
+    else if (speedMph < 70) currentGear = 'G2';
+    else if (speedMph < 110) currentGear = 'G3';
+    else if (speedMph < 155) currentGear = 'G4';
+    else if (speedMph < 205) currentGear = 'G5';
+    else currentGear = 'G6';
+
+    // Speedometer
+    const speedEl = document.getElementById('digitalSpeedVal');
+    if (speedEl) speedEl.textContent = speedMph;
+
+    // Gear indicator
+    const gearEl = document.getElementById('hudGearVal');
+    if (gearEl) gearEl.textContent = currentGear;
+
+    // Update Cockpit Interior Display if active
+    if (this.cameraMode === 'INTERIOR') {
+      const cSpeed = document.getElementById('cockpitSpeedVal');
+      if (cSpeed) cSpeed.textContent = speedMph;
+
+      const cGear = document.getElementById('cockpitGear');
+      if (cGear) cGear.textContent = currentGear;
+
+      const cRpm = document.getElementById('cockpitRpmFill');
+      if (cRpm) {
+        const rpmPct = Math.min(1.0, (speedMph % 45) / 45);
+        cRpm.style.width = Math.round(rpmPct * 100) + '%';
+      }
+
+      const wheelEl = document.getElementById('cockpitSteeringWheel');
+      if (wheelEl) {
+        const rotDeg = (this.playerVehicle.steerAngle || 0) * 110;
+        wheelEl.style.transform = `rotate(${rotDeg}deg)`;
+      }
+
+      // Rearview mirror traffic / rival blips
+      const mirrorBlipsContainer = document.getElementById('mirrorBlips');
+      if (mirrorBlipsContainer) {
+        const p = this.playerVehicle;
+        const forwardX = Math.sin(p.angle);
+        const forwardZ = Math.cos(p.angle);
+        const rightX = -Math.cos(p.angle);
+        const rightZ = Math.sin(p.angle);
+
+        let blipsHtml = '';
+        const behindList = [];
+        if (this.aiVehicles) behindList.push(...this.aiVehicles);
+        if (this.trafficPolice && this.trafficPolice.trafficCars) behindList.push(...this.trafficPolice.trafficCars);
+        if (this.trafficPolice && this.trafficPolice.policeCruisers) behindList.push(...this.trafficPolice.policeCruisers);
+
+        for (const other of behindList) {
+          const dx = other.x - p.x;
+          const dz = other.z - p.z;
+          const dist = Math.hypot(dx, dz);
+          if (dist > 3 && dist < 55) {
+            const dot = dx * forwardX + dz * forwardZ;
+            if (dot < -2) { // strictly behind player
+              const latDot = dx * rightX + dz * rightZ;
+              const mirrorX = 115 - latDot * 8;
+              const mirrorY = 22 + (dist / 55) * 15;
+              const color = other.isPolice ? '#00f0ff' : '#ff0055';
+              blipsHtml += `<div class="mirror-car-blip" style="left:${Math.max(10, Math.min(205, mirrorX))}px; top:${mirrorY}px; background:${color}; box-shadow:0 0 6px ${color};"></div>`;
+            }
+          }
+        }
+        mirrorBlipsContainer.innerHTML = blipsHtml;
+      }
+    }
+
+    // Position & Laps
+    const posEl = document.getElementById('hudPositionVal');
+    if (posEl) posEl.textContent = this.playerVehicle.finishRank;
+
+    const lapEl = document.getElementById('hudLapCounter');
+    if (lapEl) lapEl.textContent = `LAP ${Math.min(this.totalLaps, this.currentLap)} / ${this.totalLaps}`;
+
+    const timerEl = document.getElementById('hudTimeVal');
+    if (timerEl) {
+      const min = Math.floor(this.raceTotalTime / 60);
+      const sec = (this.raceTotalTime % 60).toFixed(2);
+      timerEl.textContent = `${min}:${sec < 10 ? '0' : ''}${sec}`;
+    }
+
+    // Nitro Bar & Button State
+    const nitroFill = document.getElementById('nitroBarFill');
+    if (nitroFill) {
+      nitroFill.style.width = `${this.playerVehicle.nitroAmount}%`;
+    }
+    const nitroBtn = document.getElementById('btnNitro');
+    if (nitroBtn) {
+      if (this.nitroDepleted || this.playerVehicle.nitroAmount <= 5) {
+        nitroBtn.classList.add('nitro-empty');
+      } else {
+        nitroBtn.classList.remove('nitro-empty');
+      }
+    }
+
+    // CarX Highway Distance Progress Tracker
+    const totalWps = (this.trackData && this.trackData.waypoints) ? this.trackData.waypoints.length : 12;
+    const totalRaceUnits = Math.max(1, this.totalLaps * totalWps * 1000);
+    const playerProgressPct = Math.min(100, Math.max(0, ((this.playerVehicle.raceScore || 0) / totalRaceUnits) * 100));
+
+    const highwayFill = document.getElementById('highwayTrackFill');
+    if (highwayFill) highwayFill.style.width = `${playerProgressPct.toFixed(1)}%`;
+
+    const playerMarker = document.getElementById('hudPlayerMarker');
+    if (playerMarker) playerMarker.style.left = `${playerProgressPct.toFixed(1)}%`;
+
+    if (this.aiVehicles && this.aiVehicles.length > 0) {
+      this.aiVehicles.forEach((ai, idx) => {
+        const rivalMarker = document.getElementById(`hudRivalMarker${idx + 1}`);
+        if (rivalMarker) {
+          const aiProgressPct = Math.min(98, Math.max(0, ((ai.raceScore || 0) / totalRaceUnits) * 100));
+          rivalMarker.style.left = `${aiProgressPct.toFixed(1)}%`;
+        }
+      });
+    }
+
+    const policeMarker = document.getElementById('hudPoliceMarker');
+    if (policeMarker) {
+      const policeProgress = Math.min(95, Math.max(0, playerProgressPct - 7.5));
+      policeMarker.style.left = `${policeProgress.toFixed(1)}%`;
+    }
+
+    const totalDistEl = document.getElementById('hudTotalDistanceLabel');
+    if (totalDistEl && this.trackData) {
+      totalDistEl.textContent = `${this.trackData.length_km || 4.2} KM`;
+    }
+
+    // CarX Event Mission Objectives Checklist Updates
+    this.maxSpeedRecorded = Math.max(this.maxSpeedRecorded, speedMph);
+
+    const obj1 = document.getElementById('hudObj1');
+    const obj1Status = document.getElementById('hudObj1Status');
+    if (obj1 && obj1Status) {
+      const isFirst = this.playerVehicle.finishRank === 1;
+      obj1.classList.toggle('completed', isFirst);
+      obj1Status.textContent = isFirst ? '✓ 1ST PLACE' : `POS ${this.playerVehicle.finishRank}/4`;
+    }
+
+    const obj2 = document.getElementById('hudObj2');
+    const obj2Status = document.getElementById('hudObj2Status');
+    if (obj2 && obj2Status) {
+      const isNearMissDone = this.nearMissCount >= 3;
+      obj2.classList.toggle('completed', isNearMissDone);
+      obj2Status.textContent = isNearMissDone ? `✓ ${this.nearMissCount}/3` : `${this.nearMissCount} / 3`;
+    }
+
+    const obj3 = document.getElementById('hudObj3');
+    const obj3Status = document.getElementById('hudObj3Status');
+    if (obj3 && obj3Status) {
+      const isSpeedDone = this.maxSpeedRecorded >= 180;
+      obj3.classList.toggle('completed', isSpeedDone);
+      obj3Status.textContent = isSpeedDone ? `✓ ${Math.round(this.maxSpeedRecorded)} MPH` : `${Math.round(this.maxSpeedRecorded)} MPH`;
+    }
+
+    // Analog curved racing tachometer
+    const rpmRatio = (speedMph % 45) / 45;
+    this.renderAnalogSpeedo(rpmRatio, speedMph, currentGear);
+
+    // Fullscreen Speed Motion Lines & Nitro Warp
+    this.updateSpeedFX(dt);
+
+    // Floating 3D AI Rival Overhead Distance Tags
+    this.updateRivalNametags();
+
+    // Live Holographic GPS Route Minimap
+    this.renderLiveGpsMinimap();
+  }
+
+  renderAnalogSpeedo(rpmRatio, speedMph, currentGear) {
+    const canvas = document.getElementById('speedoCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const cx = w / 2;
+    const cy = h / 2;
+    const radius = 52;
+
+    // Background circular dial
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius + 8, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(8, 12, 20, 0.9)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // Start angle 135 deg to 405 deg (270 deg total arc)
+    const startAngle = Math.PI * 0.75;
+    const endAngle = Math.PI * 2.25;
+    const totalArc = endAngle - startAngle;
+
+    // Normal RPM Arc (Cyan to Gold)
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, startAngle + totalArc * 0.72);
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.35)';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+
+    // Redline Arc (Red 7k-9k)
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle + totalArc * 0.72, endAngle);
+    ctx.strokeStyle = 'rgba(255, 0, 85, 0.75)';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+
+    // Ticks (0 to 9)
+    for (let i = 0; i <= 9; i++) {
+      const a = startAngle + (i / 9) * totalArc;
+      const isRed = i >= 7;
+      const x1 = cx + Math.cos(a) * (radius - 5);
+      const y1 = cy + Math.sin(a) * (radius - 5);
+      const x2 = cx + Math.cos(a) * (radius + 1);
+      const y2 = cy + Math.sin(a) * (radius + 1);
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = isRed ? '#ff0055' : 'rgba(255, 255, 255, 0.55)';
+      ctx.lineWidth = (i % 2 === 0) ? 2.2 : 1.0;
+      ctx.stroke();
+    }
+
+    // Active RPM Glowing Arc
+    const activeAngle = startAngle + Math.min(1.0, Math.max(0, rpmRatio)) * totalArc;
+    const isRedline = rpmRatio > 0.82;
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, startAngle, activeAngle);
+    ctx.strokeStyle = isRedline ? '#ff0055' : '#00f0ff';
+    ctx.lineWidth = 5;
+    ctx.shadowColor = isRedline ? '#ff0055' : '#00f0ff';
+    ctx.shadowBlur = 10;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Sweeping Needle
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    const nx = cx + Math.cos(activeAngle) * (radius - 3);
+    const ny = cy + Math.sin(activeAngle) * (radius - 3);
+    ctx.lineTo(nx, ny);
+    ctx.strokeStyle = isRedline ? '#ff0055' : '#00f0ff';
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    // Center Gear Hub
+    ctx.beginPath();
+    ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+    ctx.fillStyle = '#0a0e1a';
+    ctx.fill();
+    ctx.strokeStyle = isRedline ? '#ff0055' : 'rgba(0, 240, 255, 0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(currentGear || 'G1', cx, cy);
+  }
+
+  updateSpeedFX(dt) {
+    const canvas = document.getElementById('speedFxCanvas');
+    if (!canvas) return;
+    if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const speedMph = Math.round(Math.abs(this.playerVehicle ? this.playerVehicle.speed : 0) * 2.237);
+    const isNitro = this.playerVehicle && this.playerVehicle.isNitroActive;
+
+    if (speedMph < 85 && !isNitro) return;
+
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    const count = isNitro ? 32 : Math.min(22, Math.floor((speedMph - 85) / 4.5));
+
+    ctx.save();
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.15;
+      const distStart = Math.min(cx, cy) * (isNitro ? 0.4 : 0.6) + Math.random() * 80;
+      const length = isNitro ? 160 + Math.random() * 190 : 75 + Math.random() * 95;
+
+      const x1 = cx + Math.cos(angle) * distStart;
+      const y1 = cy + Math.sin(angle) * distStart;
+      const x2 = cx + Math.cos(angle) * (distStart + length);
+      const y2 = cy + Math.sin(angle) * (distStart + length);
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.strokeStyle = isNitro ? 'rgba(0, 240, 255, 0.4)' : 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = isNitro ? 2.4 : 1.2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  updateRivalNametags() {
+    const container = document.getElementById('hudRivalTagsContainer');
+    if (!container || !this.camera || !this.playerVehicle) return;
+
+    if (this.state === 'COUNTDOWN') {
+      if (this.rivalTagElements) {
+        this.rivalTagElements.forEach(pill => { pill.style.display = 'none'; });
+      }
+      return;
+    }
+
+    if (!this.rivalTagElements) {
+      this.rivalTagElements = [];
+      this.aiVehicles.forEach((ai, idx) => {
+        const pill = document.createElement('div');
+        pill.className = 'rival-nametag-pill';
+        pill.innerHTML = `
+          <span class="rival-nametag-rank">${idx + 2}</span>
+          <span class="rival-nametag-name">${ai.name || 'RIVAL'}</span>
+          <span class="rival-nametag-dist">+0m</span>
+        `;
+        container.appendChild(pill);
+        this.rivalTagElements.push(pill);
+      });
+    }
+
+    const tempVec = new THREE.Vector3();
+    const halfW = window.innerWidth / 2;
+    const halfH = window.innerHeight / 2;
+
+    this.aiVehicles.forEach((ai, idx) => {
+      const pill = this.rivalTagElements[idx];
+      if (!pill) return;
+
+      tempVec.set(ai.x, 1.8, ai.z);
+      tempVec.project(this.camera);
+
+      // Only show if in front of camera
+      if (tempVec.z > 0 && tempVec.z < 1) {
+        const sx = tempVec.x * halfW + halfW;
+        const sy = -(tempVec.y * halfH) + halfH;
+
+        const dx = ai.x - this.playerVehicle.x;
+        const dz = ai.z - this.playerVehicle.z;
+        const dist = Math.round(Math.hypot(dx, dz));
+
+        const forwardX = Math.sin(this.playerVehicle.angle);
+        const forwardZ = Math.cos(this.playerVehicle.angle);
+        const dot = dx * forwardX + dz * forwardZ;
+        const distSign = dot >= 0 ? '+' : '-';
+
+        pill.style.left = `${sx}px`;
+        pill.style.top = `${sy}px`;
+        pill.style.display = (dist < 130) ? 'flex' : 'none';
+
+        const rankEl = pill.querySelector('.rival-nametag-rank');
+        if (rankEl) rankEl.textContent = ai.finishRank || (idx + 2);
+
+        const distEl = pill.querySelector('.rival-nametag-dist');
+        if (distEl) distEl.textContent = `${distSign}${dist}m`;
+      } else {
+        pill.style.display = 'none';
+      }
+    });
+  }
+
+  spawnTireSmoke(car) {
+    if (!this.particleGroup) return;
+    const sin = Math.sin(car.angle);
+    const cos = Math.cos(car.angle);
+    const rearX = car.x - sin * 1.5;
+    const rearZ = car.z - cos * 1.5;
+
+    const offsets = [-0.85, 0.85];
+    offsets.forEach(off => {
+      const px = rearX + cos * off;
+      const pz = rearZ - sin * off;
+      const p = new THREE.Mesh(this.sharedSmokeGeo, this.sharedSmokeMat.clone());
+      p.position.set(px, 0.35 + Math.random() * 0.15, pz);
+      this.particleGroup.add(p);
+      this.particles.push({
+        mesh: p,
+        vx: (Math.random() - 0.5) * 1.2,
+        vy: 1.0 + Math.random() * 1.5,
+        vz: (Math.random() - 0.5) * 1.2,
+        life: 0.6,
+        maxLife: 0.6,
+        growth: 4.2
+      });
+    });
+  }
+
+  spawnSparks(x, y, z, nx, nz) {
+    if (!this.particleGroup) return;
+    for (let i = 0; i < 4; i++) {
+      const p = new THREE.Mesh(this.sharedSparkGeo, this.sharedSparkMat);
+      p.position.set(x, y, z);
+      this.particleGroup.add(p);
+      this.particles.push({
+        mesh: p,
+        vx: nx * (6 + Math.random() * 9) + (Math.random() - 0.5) * 4,
+        vy: 2.5 + Math.random() * 4.5,
+        vz: nz * (6 + Math.random() * 9) + (Math.random() - 0.5) * 4,
+        life: 0.32,
+        maxLife: 0.32,
+        gravity: 16.0
+      });
+    }
+  }
+
+  spawnVictoryFireworks() {
+    if (!this.particleGroup || !this.playerVehicle) return;
+    const colors = [0xff0055, 0x00f0ff, 0xffd600, 0x00f59b, 0xff5500];
+    const col = colors[Math.floor(Math.random() * colors.length)];
+    const startX = this.playerVehicle.x + (Math.random() - 0.5) * 20;
+    const startY = 8 + Math.random() * 12;
+    const startZ = this.playerVehicle.z + (Math.random() - 0.5) * 20;
+
+    for (let i = 0; i < 28; i++) {
+      const geo = new THREE.BoxGeometry(0.18, 0.18, 0.18);
+      const mat = new THREE.MeshBasicMaterial({ color: col });
+      const p = new THREE.Mesh(geo, mat);
+      p.position.set(startX, startY, startZ);
+      this.particleGroup.add(p);
+
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 4 + Math.random() * 12;
+      this.particles.push({
+        mesh: p,
+        vx: Math.cos(angle) * speed,
+        vy: (Math.random() - 0.2) * speed,
+        vz: Math.sin(angle) * speed,
+        life: 0.9,
+        maxLife: 0.9,
+        gravity: 8.0
+      });
+    }
+  }
+
+  updateParticles(dt) {
+    if (!this.particleGroup) return;
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.life -= dt;
+      if (p.life <= 0) {
+        this.particleGroup.remove(p.mesh);
+        this.particles.splice(i, 1);
+        continue;
+      }
+      p.mesh.position.x += p.vx * dt;
+      p.mesh.position.y += p.vy * dt;
+      p.mesh.position.z += p.vz * dt;
+      if (p.gravity) p.vy -= p.gravity * dt;
+      if (p.growth) {
+        const s = 1 + (1 - p.life / p.maxLife) * p.growth;
+        p.mesh.scale.set(s, s, s);
+      }
+      if (p.mesh.material && p.mesh.material.transparent) {
+        p.mesh.material.opacity = (p.life / p.maxLife) * 0.55;
+      }
+    }
+  }
+
+  checkNearMisses(dt) {
+    if (!this.playerVehicle || !this.character.isInVehicle) return;
+    const speedMph = Math.abs(this.playerVehicle.speed) * 2.237;
+    if (speedMph < 52) return;
+
+    const now = performance.now();
+    if (now - this.lastNearMissTime < 1400) return;
+
+    const checkList = [];
+    if (this.aiVehicles) checkList.push(...this.aiVehicles);
+    if (this.trafficPolice) {
+      if (this.trafficPolice.trafficCars) checkList.push(...this.trafficPolice.trafficCars);
+      if (this.trafficPolice.policeCruisers) checkList.push(...this.trafficPolice.policeCruisers);
+    }
+
+    for (const other of checkList) {
+      const ox = other.x !== undefined ? other.x : (other.mesh ? other.mesh.position.x : null);
+      const oz = other.z !== undefined ? other.z : (other.mesh ? other.mesh.position.z : null);
+      if (ox === null || oz === null) continue;
+
+      const d = Math.hypot(this.playerVehicle.x - ox, this.playerVehicle.z - oz);
+      if (d > 2.5 && d < 5.0) {
+        this.lastNearMissTime = now;
+        this.nearMissCount++;
+
+        // Audio Effects
+        if (window.racingAudio) {
+          if (window.racingAudio.playWhooshNearMiss) window.racingAudio.playWhooshNearMiss();
+          if (Math.random() < 0.4 && window.racingAudio.playTrafficHorn) window.racingAudio.playTrafficHorn();
+        }
+
+        const reward = speedMph > 115 ? 250 : 100;
+        const text = speedMph > 115 ? `🔥 SPEED COMBO x${this.nearMissCount}! +$${reward}` : `⚡ NEAR MISS x${this.nearMissCount}! +$${reward}`;
+        this.triggerCarxFeat(text, reward);
+        break;
+      }
+    }
+  }
+
+  renderLiveGpsMinimap() {
+    const canvas = document.getElementById('hudLiveGpsCanvas');
+    if (!canvas || !this.trackData || !this.trackData.waypoints) return;
+    if (canvas.width !== 160) canvas.width = 160;
+    if (canvas.height !== 90) canvas.height = 90;
+    const ctx = canvas.getContext('2d');
+
+    // Canvas Background
+    ctx.fillStyle = 'rgba(8, 12, 20, 0.92)';
+    ctx.fillRect(0, 0, 160, 90);
+
+    const wps = this.trackData.waypoints;
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    wps.forEach(p => {
+      const px = p.x;
+      const pz = (p.z !== undefined) ? p.z : (p.y !== undefined ? p.y : 0);
+      if (px < minX) minX = px;
+      if (px > maxX) maxX = px;
+      if (pz < minZ) minZ = pz;
+      if (pz > maxZ) maxZ = pz;
+    });
+
+    const spanX = (maxX - minX) || 1;
+    const spanZ = (maxZ - minZ) || 1;
+    const pad = 12;
+    const drawW = canvas.width - pad * 2;
+    const drawH = canvas.height - pad * 2;
+
+    const toCanvasX = (x) => pad + ((x - minX) / spanX) * drawW;
+    const toCanvasY = (z) => pad + ((z - minZ) / spanZ) * drawH;
+
+    // Glowing Neon Cyan Highway Outline
+    ctx.strokeStyle = 'rgba(0, 240, 255, 0.4)';
+    ctx.lineWidth = 5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    ctx.moveTo(toCanvasX(wps[0].x), toCanvasY(wps[0].z !== undefined ? wps[0].z : wps[0].y));
+    for (let i = 1; i < wps.length; i++) {
+      ctx.lineTo(toCanvasX(wps[i].x), toCanvasY(wps[i].z !== undefined ? wps[i].z : wps[i].y));
+    }
+    ctx.closePath();
+    ctx.stroke();
+
+    ctx.strokeStyle = '#00f0ff';
+    ctx.lineWidth = 1.8;
+    ctx.stroke();
+
+    // AI Rivals (Red Dots)
+    if (this.aiVehicles) {
+      ctx.fillStyle = '#ff0055';
+      this.aiVehicles.forEach(ai => {
+        const ax = toCanvasX(ai.x);
+        const ay = toCanvasY(ai.z);
+        ctx.beginPath();
+        ctx.arc(ax, ay, 3, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    // Police Cruisers (Flashing Red & Blue)
+    if (this.trafficPolice && this.trafficPolice.policeCruisers && this.trafficPolice.policeCruisers.length > 0) {
+      const isRed = Math.floor(performance.now() / 250) % 2 === 0;
+      ctx.fillStyle = isRed ? '#ff0033' : '#0088ff';
+      this.trafficPolice.policeCruisers.forEach(pc => {
+        const cx = toCanvasX(pc.x);
+        const cy = toCanvasY(pc.z);
+        ctx.beginPath();
+        ctx.arc(cx, cy, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    // Player Vehicle (Bright Cyan Dot with directional headlight indicator)
+    if (this.playerVehicle) {
+      const px = toCanvasX(this.playerVehicle.x);
+      const py = toCanvasY(this.playerVehicle.z);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#00f0ff';
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(px, py, 4.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.shadowBlur = 0;
+
+      const beamLen = 8;
+      const bx = px + Math.sin(this.playerVehicle.angle) * beamLen;
+      const by = py + Math.cos(this.playerVehicle.angle) * beamLen;
+      ctx.strokeStyle = '#00f0ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(px, py);
+      ctx.lineTo(bx, by);
+      ctx.stroke();
+    }
+  }
+
+  checkNearMisses(dt) {
+    if (!this.playerVehicle || !this.character.isInVehicle) return;
+    const speedMph = Math.abs(this.playerVehicle.speed) * 2.237;
+    if (speedMph < 58) return;
+
+    const now = performance.now();
+    if (now - this.lastNearMissTime < 1800) return; // 1.8s cooldown
+
+    const checkList = [];
+    if (this.aiVehicles) checkList.push(...this.aiVehicles);
+    if (this.trafficPolice) {
+      if (this.trafficPolice.trafficCars) checkList.push(...this.trafficPolice.trafficCars);
+      if (this.trafficPolice.policeCruisers) checkList.push(...this.trafficPolice.policeCruisers);
+    }
+
+    for (const other of checkList) {
+      const ox = other.x !== undefined ? other.x : (other.mesh ? other.mesh.position.x : null);
+      const oz = other.z !== undefined ? other.z : (other.mesh ? other.mesh.position.z : null);
+      if (ox === null || oz === null) continue;
+
+      const d = Math.hypot(this.playerVehicle.x - ox, this.playerVehicle.z - oz);
+      if (d > 2.0 && d < 4.8) {
+        this.lastNearMissTime = now;
+        this.nearMissCount++;
+        const reward = speedMph > 115 ? 250 : 100;
+        const text = speedMph > 115 ? `🔥 HIGHWAY COMBO! +$${reward}` : `⚡ NEAR MISS! +$${reward}`;
+        this.triggerCarxFeat(text, reward);
+        break;
+      }
+    }
+  }
+
+  triggerCarxFeat(text, reward = 100) {
+    const popup = document.getElementById('carxFeatPopup');
+    if (!popup) return;
+    popup.textContent = text;
+    popup.classList.add('active');
+
+    // Add cash bonus to user career wallet
+    if (window.racingApp && typeof window.racingApp.userCash === 'number') {
+      window.racingApp.userCash += reward;
+      window.racingApp.updateUI();
+    }
+
+    clearTimeout(this.featTimeout);
+    this.featTimeout = setTimeout(() => {
+      popup.classList.remove('active');
+    }, 1200);
+  }
+
+  updateInteractionPrompt(show) {
+    let promptEl = document.getElementById('vehicleInteractPrompt');
+    if (!promptEl) {
+      promptEl = document.createElement('div');
+      promptEl.id = 'vehicleInteractPrompt';
+      promptEl.style.cssText = `
+        position: absolute;
+        top: 60%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 240, 255, 0.2);
+        border: 2px solid #00f0ff;
+        border-radius: 8px;
+        padding: 0.6rem 1.4rem;
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: #fff;
+        text-shadow: 0 0 10px #00f0ff;
+        display: none;
+        z-index: 50;
+      `;
+      promptEl.textContent = '[E] ENTER VEHICLE';
+      this.container.appendChild(promptEl);
+    }
+    promptEl.style.display = show ? 'block' : 'none';
+  }
+
+  resetPlayerToTrack() {
+    if (!this.playerVehicle || !this.trackData || !this.trackData.waypoints) return;
+    const wps = this.trackData.waypoints;
+    const scale = 0.5;
+
+    let closestDist = Infinity;
+    let closestIdx = 0;
+    wps.forEach((wp, idx) => {
+      const wx = (wp.z !== undefined) ? wp.x : (wp.x - 1400) * scale;
+      const wz = (wp.z !== undefined) ? wp.z : (wp.y - 1200) * scale;
+      const d = Math.hypot(this.playerVehicle.x - wx, this.playerVehicle.z - wz);
+      if (d < closestDist) {
+        closestDist = d;
+        closestIdx = idx;
+      }
+    });
+
+    const currWp = wps[closestIdx];
+    const nextWp = wps[(closestIdx + 1) % wps.length];
+    const cx = (currWp.z !== undefined) ? currWp.x : (currWp.x - 1400) * scale;
+    const cz = (currWp.z !== undefined) ? currWp.z : (currWp.y - 1200) * scale;
+    const nx = (nextWp.z !== undefined) ? nextWp.x : (nextWp.x - 1400) * scale;
+    const nz = (nextWp.z !== undefined) ? nextWp.z : (nextWp.y - 1200) * scale;
+
+    const forwardAngle = Math.atan2(nx - cx, nz - cz);
+
+    this.playerVehicle.x = cx;
+    this.playerVehicle.z = cz;
+    this.playerVehicle.angle = forwardAngle;
+    this.playerVehicle.pitch = 0;
+    this.playerVehicle.roll = 0;
+    this.playerVehicle.mesh.position.set(cx, 0.04, cz);
+    this.playerVehicle.mesh.rotation.order = 'YXZ';
+    this.playerVehicle.mesh.rotation.set(0, forwardAngle, 0);
+
+    this.triggerCarxFeat('🏎️ RECOVERED TO TRACK', 0);
+  }
+
+  render() {
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  stop() {
+    this.state = 'STOPPED';
+    if (window.racingAudio) {
+      window.racingAudio.stopEngine();
+      window.racingAudio.stopTireScreech();
+      window.racingAudio.stopPoliceSiren();
+      window.racingAudio.stopRadio();
+    }
+  }
+}
+
+window.RacingGameEngine3D = RacingGameEngine3D;

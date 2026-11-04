@@ -1,0 +1,13 @@
+# Python & Environment
+venv/
+*.py[cod]
+__pycache__/
+*.so
+
+# Database & secrets
+db.sqlite3
+cookies.txt
+
+# OS & debug scratch files
+.DS_Store
+scratch_debug.js
