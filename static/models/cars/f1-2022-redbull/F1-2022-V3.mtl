@@ -1,0 +1,110 @@
+# Red Bull Racing RB18 Material Definition
+newmtl Livery
+Ka 0.2 0.2 0.2
+Kd 0.95 0.95 0.95
+Ks 0.4 0.4 0.4
+Ns 80.0
+map_Kd textures/Livery_blue.png
+
+newmtl Livery_Wings
+Ka 0.2 0.2 0.2
+Kd 0.95 0.95 0.95
+Ks 0.4 0.4 0.4
+Ns 80.0
+map_Kd textures/Livery_Wings_blue.png
+
+newmtl Livery_blue
+Ka 0.2 0.2 0.2
+Kd 0.95 0.95 0.95
+Ks 0.4 0.4 0.4
+Ns 80.0
+map_Kd textures/Livery_blue.png
+
+newmtl Livery_white
+Ka 0.2 0.2 0.2
+Kd 0.95 0.95 0.95
+Ks 0.4 0.4 0.4
+Ns 80.0
+map_Kd textures/Livery_white.png
+
+newmtl Livery_wings_Blue
+Ka 0.2 0.2 0.2
+Kd 0.95 0.95 0.95
+Ks 0.4 0.4 0.4
+Ns 80.0
+map_Kd textures/Livery_Wings_blue.png
+
+newmtl tyres
+Ka 0.1 0.1 0.1
+Kd 0.85 0.85 0.85
+Ks 0.05 0.05 0.05
+Ns 10.0
+map_Kd textures/f1_2022_tyres.png
+
+newmtl rims
+Ka 0.2 0.2 0.2
+Kd 0.9 0.9 0.9
+Ks 0.8 0.8 0.8
+Ns 90.0
+map_Kd textures/rims.png
+
+newmtl carbon
+Ka 0.15 0.15 0.15
+Kd 0.7 0.7 0.7
+Ks 0.3 0.3 0.3
+Ns 40.0
+map_Kd textures/carbon.png
+
+newmtl Steer
+Ka 0.2 0.2 0.2
+Kd 0.9 0.9 0.9
+Ks 0.3 0.3 0.3
+Ns 40.0
+map_Kd textures/Steer.png
+
+newmtl brake
+Ka 0.2 0.2 0.2
+Kd 0.8 0.8 0.8
+Ks 0.4 0.4 0.4
+Ns 50.0
+map_Kd textures/brake.png
+
+newmtl chrome
+Ka 0.3 0.3 0.3
+Kd 0.9 0.9 0.9
+Ks 0.95 0.95 0.95
+Ns 100.0
+map_Kd textures/chrome.png
+
+newmtl generic
+Ka 0.2 0.2 0.2
+Kd 0.85 0.85 0.85
+Ks 0.3 0.3 0.3
+Ns 40.0
+map_Kd textures/generic.png
+
+newmtl UV_map
+Ka 0.2 0.2 0.2
+Kd 0.9 0.9 0.9
+Ks 0.2 0.2 0.2
+Ns 30.0
+map_Kd textures/F1_2022_Livery_UV.png
+
+newmtl UV_map_wings
+Ka 0.2 0.2 0.2
+Kd 0.9 0.9 0.9
+Ks 0.2 0.2 0.2
+Ns 30.0
+map_Kd textures/F1_2022_Livery_Wings_UV.png
+
+newmtl Black
+Ka 0.02 0.02 0.02
+Kd 0.05 0.05 0.05
+Ks 0.2 0.2 0.2
+Ns 30.0
+
+newmtl mirror
+Ka 0.3 0.3 0.3
+Kd 0.8 0.8 0.8
+Ks 0.95 0.95 0.95
+Ns 100.0

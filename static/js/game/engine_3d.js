@@ -786,8 +786,18 @@ class RacingGameEngine3D {
     this.nearMissCount = 0;
     this.maxSpeedRecorded = 0;
 
-    // Spawn 3D Civilian Highway Traffic across all lanes
-    this.trafficPolice.initTraffic(this.trackData, 14);
+    this.isF1Track = (trackSlug === 'monza-f1' || this.trackData.isF1Track || this.trackData.is_f1_track);
+
+    // Spawn 3D Civilian Highway Traffic (DISABLED on Formula 1 Grand Prix Circuits)
+    if (this.isF1Track) {
+      this.trafficPolice.initTraffic(this.trackData, 0);
+      this.trafficPolice.setWantedLevel(0);
+      const trafficEl = document.getElementById('hudTrafficVal');
+      if (trafficEl) trafficEl.textContent = 'FIA GP (No Traffic)';
+      if (policeEl) policeEl.textContent = 'None (Safety Car)';
+    } else {
+      this.trafficPolice.initTraffic(this.trackData, 14);
+    }
 
     // Trigger GTA District notification card
     this.showGtaDistrictBanner(this.trackData.name, this.trackData.district || this.trackData.country);
@@ -803,8 +813,10 @@ class RacingGameEngine3D {
     const spawnX = (startSlot.x !== undefined) ? (startSlot.z !== undefined ? startSlot.x : (startSlot.x - 1400) * scale) : 0;
     const spawnZ = (startSlot.z !== undefined) ? startSlot.z : (startSlot.y !== undefined ? (startSlot.y - 1200) * scale : 0);
 
-    const playerMesh = window.CarModels3D.createVehicleMesh(playerCarConfig.slug, playerCarConfig.color || '#f2f2f2', { isPlayer: true });
-    playerMesh.position.set(spawnX, 0.04, spawnZ);
+    const isF1Car = playerCarConfig.slug.startsWith('f1-') || playerCarConfig.slug === 'mclaren-mp45';
+    const isCustomPaint = !isF1Car && !!(playerCarConfig.color && playerCarConfig.default_color && playerCarConfig.color.toLowerCase() !== playerCarConfig.default_color.toLowerCase());
+    const playerMesh = window.CarModels3D.createVehicleMesh(playerCarConfig.slug, playerCarConfig.color || '#f2f2f2', { isPlayer: true, isCustomPaint });
+    playerMesh.position.set(spawnX, 0.045, spawnZ);
     playerMesh.rotation.order = 'YXZ';
     playerMesh.rotation.set(0, startSlot.angle || 0, 0);
     this.scene.add(playerMesh);
@@ -814,7 +826,7 @@ class RacingGameEngine3D {
       slug: playerCarConfig.slug,
       name: playerCarConfig.name,
       x: spawnX,
-      y: 0.04,
+      y: 0.045,
       z: spawnZ,
       angle: startSlot.angle || 0,
       pitch: 0,
@@ -838,12 +850,12 @@ class RacingGameEngine3D {
     this.aiVehicles = [];
     for (let i = 0; i < 3; i++) {
       const slot = this.trackData.startGrid[i + 1] || startSlot;
-      const cfg = aiCarConfigs[i] || { slug: 'bmw-m3-competition', color: '#1f4068' };
-      const aiMesh = window.CarModels3D.createVehicleMesh(cfg.slug, cfg.color);
+      const cfg = aiCarConfigs[i] || { slug: 'bmw-m3-competition', color: '#00334e' };
+      const aiMesh = window.CarModels3D.createVehicleMesh(cfg.slug, cfg.color, { isCustomPaint: false });
 
       const aiSpawnX = (slot.x !== undefined) ? (slot.z !== undefined ? slot.x : (slot.x - 1400) * scale) : 0;
       const aiSpawnZ = (slot.z !== undefined) ? slot.z : (slot.y !== undefined ? (slot.y - 1200) * scale : 0);
-      aiMesh.position.set(aiSpawnX, 0.04, aiSpawnZ);
+      aiMesh.position.set(aiSpawnX, 0.045, aiSpawnZ);
       aiMesh.rotation.order = 'YXZ';
       aiMesh.rotation.set(0, slot.angle || 0, 0);
       this.scene.add(aiMesh);
@@ -852,7 +864,7 @@ class RacingGameEngine3D {
         mesh: aiMesh,
         slug: cfg.slug,
         x: aiSpawnX,
-        y: 0.04,
+        y: 0.045,
         z: aiSpawnZ,
         angle: slot.angle || 0,
         speed: 0,
@@ -903,11 +915,44 @@ class RacingGameEngine3D {
     this.camera.position.copy(this.cameraLag);
     this.camera.lookAt(this.lookLag);
 
+    this.isF1Mode = !!(this.trackData.isF1Track || (playerCarConfig.category === 'Formula 1') || (playerCarConfig.slug && playerCarConfig.slug.startsWith('f1-')));
+    this.f1SectorTimes = [null, null, null];
+    this.f1BestSectorTimes = [27.42, 29.85, 21.63];
+    this.f1CurrentSector = 1;
+    this.f1CurrentLapTime = 0;
+    this.f1CountdownStep = -1;
+    this.f1DrsActive = false;
+    this.f1DrsAvailable = false;
+
     this.state = 'COUNTDOWN';
-    this.countdownTimer = 3.6;
+    this.countdownTimer = this.isF1Mode ? 4.8 : 3.6;
 
     const cdEl = document.getElementById('countdownOverlay');
-    if (cdEl) cdEl.style.display = 'flex';
+    const f1GantryEl = document.getElementById('f1GantryOverlay');
+    const f1TimingBox = document.getElementById('f1TimingSignalsBox');
+
+    if (this.isF1Mode) {
+      if (cdEl) cdEl.style.display = 'none';
+      if (f1GantryEl) {
+        f1GantryEl.style.display = 'flex';
+        const gpTitle = document.getElementById('f1GantryGpTitle');
+        if (gpTitle) gpTitle.textContent = (this.trackData.name || 'ITALIAN GRAND PRIX').toUpperCase();
+        for (let l = 1; l <= 5; l++) {
+          const col = document.getElementById(`f1Light${l}`);
+          if (col) col.classList.remove('lit');
+        }
+        const statusEl = document.getElementById('f1GantryStatus');
+        if (statusEl) {
+          statusEl.textContent = 'STAND BY FOR START';
+          statusEl.classList.remove('lights-out');
+        }
+      }
+      if (f1TimingBox) f1TimingBox.style.display = 'flex';
+    } else {
+      if (cdEl) cdEl.style.display = 'flex';
+      if (f1GantryEl) f1GantryEl.style.display = 'none';
+      if (f1TimingBox) f1TimingBox.style.display = 'none';
+    }
 
     this.lastTime = performance.now();
     requestAnimationFrame((t) => this.loop(t));
@@ -940,37 +985,95 @@ class RacingGameEngine3D {
       if (this.keys.up || this.keys.down || this.keys.nitro) {
         this.countdownTimer = Math.min(this.countdownTimer, 0.12);
       }
-      const prevTimer = Math.ceil(this.countdownTimer);
       this.countdownTimer -= dt;
-      const currentTimer = Math.ceil(this.countdownTimer);
 
-      const cdNum = document.getElementById('countdownNumber');
-      if (cdNum) {
-        if (this.countdownTimer > 0.6) {
-          cdNum.textContent = currentTimer;
-          if (currentTimer !== prevTimer) window.racingAudio.playCountdownBeep(false);
-        } else {
-          cdNum.textContent = 'GO!';
-          cdNum.style.color = '#00f0ff';
-          if (prevTimer === 1) window.racingAudio.playCountdownBeep(true);
+      if (this.isF1Mode) {
+        // Authentic 5-Red-Light F1 Sequence:
+        let litCount = 0;
+        if (this.countdownTimer <= 0.8) litCount = 5;
+        else if (this.countdownTimer <= 1.6) litCount = 4;
+        else if (this.countdownTimer <= 2.4) litCount = 3;
+        else if (this.countdownTimer <= 3.2) litCount = 2;
+        else if (this.countdownTimer <= 4.0) litCount = 1;
+
+        if (litCount !== this.f1CountdownStep) {
+          this.f1CountdownStep = litCount;
+          for (let l = 1; l <= 5; l++) {
+            const col = document.getElementById(`f1Light${l}`);
+            if (col) {
+              if (l <= litCount) col.classList.add('lit');
+              else col.classList.remove('lit');
+            }
+          }
+          if (this.world && this.world.setF1StartingLights3D) {
+            this.world.setF1StartingLights3D(litCount);
+          }
+          if (litCount > 0 && litCount <= 5) {
+            if (window.racingAudio && window.racingAudio.playCountdownBeep) {
+              window.racingAudio.playCountdownBeep(false);
+            }
+          }
+          const statusBar = document.getElementById('f1GantryStatus');
+          if (statusBar) {
+            if (litCount === 5) statusBar.textContent = 'ALL LIGHTS ON - HOLDING...';
+            else if (litCount > 0) statusBar.textContent = `RED LIGHT ${litCount} / 5`;
+          }
         }
-      }
 
-      if (this.countdownTimer <= 0) {
-        this.state = 'RACING';
-        const cdEl = document.getElementById('countdownOverlay');
-        if (cdEl) cdEl.style.display = 'none';
+        if (this.countdownTimer <= 0) {
+          this.state = 'RACING';
+          this.f1CurrentLapTime = 0;
+          for (let l = 1; l <= 5; l++) {
+            const col = document.getElementById(`f1Light${l}`);
+            if (col) col.classList.remove('lit');
+          }
+          if (this.world && this.world.setF1StartingLights3D) {
+            this.world.setF1StartingLights3D(0);
+          }
+          const statusBar = document.getElementById('f1GantryStatus');
+          if (statusBar) {
+            statusBar.textContent = 'LIGHTS OUT AND AWAY WE GO!';
+            statusBar.classList.add('lights-out');
+          }
+          if (window.racingAudio && window.racingAudio.playCountdownBeep) {
+            window.racingAudio.playCountdownBeep(true);
+          }
+          setTimeout(() => {
+            const gantryEl = document.getElementById('f1GantryOverlay');
+            if (gantryEl) gantryEl.style.display = 'none';
+          }, 1800);
+        }
+      } else {
+        const prevTimer = Math.ceil(this.countdownTimer + dt);
+        const currentTimer = Math.ceil(this.countdownTimer);
+        const cdNum = document.getElementById('countdownNumber');
+        if (cdNum) {
+          if (this.countdownTimer > 0.6) {
+            cdNum.textContent = currentTimer;
+            if (currentTimer !== prevTimer) window.racingAudio.playCountdownBeep(false);
+          } else {
+            cdNum.textContent = 'GO!';
+            cdNum.style.color = '#00f0ff';
+            if (prevTimer === 1) window.racingAudio.playCountdownBeep(true);
+          }
+        }
+
+        if (this.countdownTimer <= 0) {
+          this.state = 'RACING';
+          const cdEl = document.getElementById('countdownOverlay');
+          if (cdEl) cdEl.style.display = 'none';
+        }
       }
 
       // Keep vehicles oriented straight down the track and update camera during countdown
       if (this.playerVehicle && this.playerVehicle.mesh) {
-        this.playerVehicle.mesh.position.set(this.playerVehicle.x, 0.04, this.playerVehicle.z);
+        this.playerVehicle.mesh.position.set(this.playerVehicle.x, 0.045, this.playerVehicle.z);
         this.playerVehicle.mesh.rotation.order = 'YXZ';
         this.playerVehicle.mesh.rotation.set(0, this.playerVehicle.angle, 0);
       }
       for (const ai of this.aiVehicles) {
         if (ai.mesh) {
-          ai.mesh.position.set(ai.x, 0.04, ai.z);
+          ai.mesh.position.set(ai.x, 0.045, ai.z);
           ai.mesh.rotation.order = 'YXZ';
           ai.mesh.rotation.set(0, ai.angle, 0);
         }
@@ -1003,10 +1106,12 @@ class RacingGameEngine3D {
       // 3. Update AI Rival Vehicles in 3D
       this.updateAIVehicles(dt);
 
-      // 4. Update Traffic & Police Pursuit System
-      const pX = this.character.isInVehicle ? this.playerVehicle.x : this.character.x;
-      const pZ = this.character.isInVehicle ? this.playerVehicle.z : this.character.z;
-      this.trafficPolice.update(dt, pX, pZ, this.playerVehicle.speed, this.trackData);
+      // 4. Update Traffic & Police Pursuit System (Skipped on F1 track)
+      if (!this.isF1Track) {
+        const pX = this.character.isInVehicle ? this.playerVehicle.x : this.character.x;
+        const pZ = this.character.isInVehicle ? this.playerVehicle.z : this.character.z;
+        this.trafficPolice.update(dt, pX, pZ, this.playerVehicle.speed, this.trackData);
+      }
 
       // 4.5 Multi-Vehicle Solid Collision & Momentum Transfer
       this.handleVehicleCollisions(dt);
@@ -1028,6 +1133,9 @@ class RacingGameEngine3D {
 
       // 8. Update HUD & Gauges
       this.updateHUD(dt);
+      if (this.isF1Mode) {
+        this.updateF1Telemetry(dt);
+      }
 
       // 9. Race Finish Check
       if (this.playerVehicle.lap > this.totalLaps) {
@@ -1251,9 +1359,13 @@ class RacingGameEngine3D {
     car.pitch = (car.pitch || 0) + (targetPitch - (car.pitch || 0)) * dt * 9;
     car.roll = (car.roll || 0) + (targetRoll - (car.roll || 0)) * dt * 10;
 
-    // 7. Building Collision Pushback & Wall Sparks
+    // 7. Building Collision Pushback & Wall Sparks (strictly outside drivable track surface)
     if (this.world && this.world.buildingColliders) {
-      for (const col of this.world.buildingColliders) {
+      const roadHalfW = (this.trackData && this.trackData.roadWidth ? this.trackData.roadWidth : 36) / 2;
+      const isOnTrack = this.world.isNearTrack && this.trackData &&
+        this.world.isNearTrack(car.x, car.z, this.trackData, roadHalfW + 3.0);
+      if (!isOnTrack) {
+        for (const col of this.world.buildingColliders) {
         const dx = car.x - col.x;
         const dz = car.z - col.z;
         const dist = Math.hypot(dx, dz);
@@ -1279,18 +1391,32 @@ class RacingGameEngine3D {
           }
         }
       }
+      }
     }
 
     // 8. Vehicle-to-Vehicle Solid Collision & Dynamics
     this.handleVehicleCollisions(dt);
 
     // Update 3D mesh position and suspension angles
-    car.mesh.position.set(car.x, 0.04, car.z);
+    // Dynamically compensate origin height for suspension pitch dive / acceleration squat / body roll
+    // so front splitter and wheels never sink below the road surface!
+    const pitchDrop = Math.abs(Math.sin(car.pitch || 0)) * 2.35;
+    const rollDrop = Math.abs(Math.sin(car.roll || 0)) * 0.95;
+    const dynamicY = 0.045 + pitchDrop + rollDrop;
+
+    car.mesh.position.set(car.x, dynamicY, car.z);
     car.mesh.rotation.order = 'YXZ';
     car.mesh.rotation.set(car.pitch || 0, car.angle, car.roll || 0);
 
-    // Wheels rotation & steering
-    if (car.mesh.userData && car.mesh.userData.wheels) {
+    // Keep contact shadow locked horizontally on road surface at world Y = 0.038
+    const shadow = car.mesh.getObjectByName('contactShadowPlane');
+    if (shadow) {
+      shadow.rotation.set(-Math.PI / 2 - (car.pitch || 0), 0, -(car.roll || 0));
+      shadow.position.y = 0.038 - dynamicY;
+    }
+
+    // Wheels rotation & steering for procedural fallback
+    if (car.mesh.userData && car.mesh.userData.wheels && !car.mesh.userData.isRealModelLoaded) {
       const rollRate = (car.speed / 0.34) * dt;
       const w = car.mesh.userData.wheels;
       w.fl.roll.rotation.x += rollRate;
@@ -1371,12 +1497,12 @@ class RacingGameEngine3D {
       ai.x += Math.sin(ai.angle) * ai.speed * dt;
       ai.z += Math.cos(ai.angle) * ai.speed * dt;
 
-      ai.mesh.position.set(ai.x, 0.04, ai.z);
+      ai.mesh.position.set(ai.x, 0.045, ai.z);
       ai.mesh.rotation.order = 'YXZ';
       ai.mesh.rotation.set(0, ai.angle, 0);
 
-      // Wheel animations
-      if (ai.mesh.userData && ai.mesh.userData.wheels) {
+      // Wheel animations for procedural fallback
+      if (ai.mesh.userData && ai.mesh.userData.wheels && !ai.mesh.userData.isRealModelLoaded) {
         const rollRate = (ai.speed / 0.34) * dt;
         const w = ai.mesh.userData.wheels;
         w.fl.roll.rotation.x += rollRate;
@@ -1899,6 +2025,105 @@ class RacingGameEngine3D {
 
     // Live Holographic GPS Route Minimap
     this.renderLiveGpsMinimap();
+  }
+
+  /* --------------------------------------------------------------------------
+     Official F1 Grand Prix Telemetry, Live Delta & DRS Zone Signals
+     -------------------------------------------------------------------------- */
+  updateF1Telemetry(dt) {
+    if (!this.playerVehicle) return;
+
+    this.f1CurrentLapTime = (this.f1CurrentLapTime || 0) + dt;
+
+    // High precision millisecond F1 lap timer display: 01:23.456
+    const timerEl = document.getElementById('hudTimeVal');
+    if (timerEl) {
+      const min = Math.floor(this.f1CurrentLapTime / 60);
+      const sec = (this.f1CurrentLapTime % 60).toFixed(3);
+      timerEl.textContent = `${min < 10 ? '0' : ''}${min}:${sec < 10 ? '0' : ''}${sec}`;
+    }
+
+    // Determine current waypoint progress and sector
+    const wps = (this.trackData && this.trackData.waypoints) ? this.trackData.waypoints : [];
+    const totalWps = Math.max(1, wps.length);
+    const curWp = (this.playerVehicle.currentWpIdx || 0) % totalWps;
+
+    // Sectors: 0 to ~35% (S1), ~35% to ~70% (S2), ~70% to 100% (S3)
+    const sec1End = Math.max(1, Math.floor(totalWps * 0.35));
+    const sec2End = Math.max(2, Math.floor(totalWps * 0.70));
+
+    let currentSec = 1;
+    if (curWp >= sec2End) currentSec = 3;
+    else if (curWp >= sec1End) currentSec = 2;
+
+    // Sector crossing splits
+    if (currentSec !== this.f1CurrentSector) {
+      const completedSec = this.f1CurrentSector;
+      this.f1CurrentSector = currentSec;
+
+      if (completedSec === 1) {
+        const s1Time = this.f1CurrentLapTime;
+        this.f1SectorTimes[0] = s1Time;
+        const chip = document.getElementById('f1Sector1');
+        const val = document.getElementById('f1Sector1Val');
+        if (chip && val) {
+          val.textContent = s1Time.toFixed(3);
+          chip.className = 'f1-sector-chip ' + (s1Time < this.f1BestSectorTimes[0] ? 'purple' : (s1Time < 28.5 ? 'green' : 'yellow'));
+        }
+      } else if (completedSec === 2) {
+        const s2Time = Math.max(0.1, this.f1CurrentLapTime - (this.f1SectorTimes[0] || 27.5));
+        this.f1SectorTimes[1] = s2Time;
+        const chip = document.getElementById('f1Sector2');
+        const val = document.getElementById('f1Sector2Val');
+        if (chip && val) {
+          val.textContent = s2Time.toFixed(3);
+          chip.className = 'f1-sector-chip ' + (s2Time < this.f1BestSectorTimes[1] ? 'purple' : (s2Time < 31.0 ? 'green' : 'yellow'));
+        }
+      }
+    }
+
+    // Live Lap Delta Calculation against pole pace
+    const targetLapPace = 79.5; // Benchmark Monza pace (1:19.500)
+    const progressPct = curWp / totalWps;
+    const expectedElapsed = progressPct * targetLapPace;
+    const delta = (this.f1CurrentLapTime - expectedElapsed);
+    const deltaEl = document.getElementById('f1DeltaVal');
+    if (deltaEl) {
+      if (delta <= 0) {
+        deltaEl.textContent = `Δ ${delta.toFixed(3)}`;
+        deltaEl.classList.remove('trailing');
+      } else {
+        deltaEl.textContent = `Δ +${delta.toFixed(3)}`;
+        deltaEl.classList.add('trailing');
+      }
+    }
+
+    // DRS Zone Detection:
+    // Rettifilo Straight (wps 0 to 2) and Serraglio Straight (wps 8 to 10)
+    const inDrsZone = (curWp <= 2 || (curWp >= 8 && curWp <= 10));
+    const drsBadge = document.getElementById('f1DrsStatusBadge');
+    const drsInd = document.getElementById('f1DrsIndicator');
+
+    if (inDrsZone) {
+      this.f1DrsAvailable = true;
+      const isActivating = (this.keys && (this.keys.nitro || this.keys.up));
+      if (isActivating && Math.abs(this.playerVehicle.speed) > 25) {
+        this.f1DrsActive = true;
+        // Aerodynamic DRS top speed & acceleration boost (+15% max speed)
+        this.playerVehicle.speed += dt * 12.0;
+        if (drsBadge) drsBadge.className = 'f1-drs-status-badge active';
+        if (drsInd) drsInd.textContent = '🚀 DRS ACTIVE (+15% TOP SPEED)';
+      } else {
+        this.f1DrsActive = false;
+        if (drsBadge) drsBadge.className = 'f1-drs-status-badge available';
+        if (drsInd) drsInd.textContent = '🟢 DRS AVAILABLE [PRESS BOOST]';
+      }
+    } else {
+      this.f1DrsAvailable = false;
+      this.f1DrsActive = false;
+      if (drsBadge) drsBadge.className = 'f1-drs-status-badge';
+      if (drsInd) drsInd.textContent = '⚪ DRS ZONE 350M';
+    }
   }
 
   renderAnalogSpeedo(rpmRatio, speedMph, currentGear) {

@@ -7,7 +7,10 @@ cd "$DIR"
 
 # Allow custom port as the first argument, default to 8080 (freeing port 8000)
 PORT="${1:-8080}"
-HOST="127.0.0.1"
+HOST="0.0.0.0"
+
+# Detect local Wi-Fi / LAN IP for direct mobile device access
+LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || ifconfig | grep "inet " | grep -v 127.0.0.1 | awk '{print $2}' | head -n 1 || echo "127.0.0.1")
 
 # Activate Python virtual environment if available
 if [ -f "venv/bin/activate" ]; then
@@ -21,7 +24,8 @@ NGROK_URL=$(python3 -c "import urllib.request, json; data=json.loads(urllib.requ
 
 echo "=========================================================="
 echo "🏎️  Racing Zone Web Application"
-echo "🌐 Local URL:  http://${HOST}:${PORT}/"
+echo "🌐 Localhost:  http://127.0.0.1:${PORT}/"
+echo "📱 Wi-Fi / LAN: http://${LOCAL_IP}:${PORT}/ (Use this on Mobile!)"
 if [ -n "$NGROK_URL" ]; then
     echo "🌍 ngrok URL:  ${NGROK_URL}"
 else

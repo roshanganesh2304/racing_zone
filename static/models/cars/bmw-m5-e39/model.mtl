@@ -94,49 +94,33 @@ map_d Meshesinteriorarrow21_diff.png
 
 newmtl Bolts1Mtl
 Material Color
-Ka 1 1 1
-Kd 1 1 1
-Ks 0.396078 0.396078 0.396078 
+Ka 0.85 0.85 0.88
+Kd 0.85 0.85 0.88
+Ks 0.95 0.95 0.95
 
 d 1
 
-Ns 0
-
-map_Ka Bolts1_diff.png
-map_Kd Bolts1_diff.png
-map_d Bolts1_diff.png
+Ns 50
 
 newmtl Spoke1Mtl
 Material Color
-Ka 0.103634 0.108711 0.14198
-Kd 0.103634 0.108711 0.14198
-Ks 0.0690894 0.0724741 0.0946535 
+Ka 0.78 0.78 0.82
+Kd 0.78 0.78 0.82
+Ks 0.92 0.92 0.92
 
 d 1
 
-Ns 255
-
-map_Ka FuelPressure1_diff.png
-map_Kd FuelPressure1_diff.png
-map_d FuelPressure1_diff.png
-
-map_Bump FuelPressure1_nmap.png
-
-map_Ns FuelPressure1_spec.png
+Ns 30
 
 newmtl Tire1Mtl
 Material Color
-Ka 1 1 1
-Kd 1 1 1
-Ks 0.027451 0.027451 0.027451 
+Ka 0.08 0.08 0.08
+Kd 0.08 0.08 0.08
+Ks 0.02 0.02 0.02
 
 d 1
 
-Ns 0
-
-map_Ka Tire1_diff.png
-map_Kd Tire1_diff.png
-map_d Tire1_diff.png
+Ns 10
 
 newmtl Cupper1Mtl
 Material Color
@@ -150,13 +134,13 @@ Ns 0
 
 newmtl Hub1Mtl
 Material Color
-Ka 1 0.133209 0.612066
-Kd 1 0.133209 0.612066
-Ks 0.396078 0.052761 0.242426 
+Ka 0.75 0.75 0.78
+Kd 0.75 0.75 0.78
+Ks 0.92 0.92 0.92
 
-d 0.501961
+d 1
 
-Ns 0
+Ns 30
 
 newmtl Meshpart28Mtl
 Material Color
@@ -628,21 +612,13 @@ Ns 0
 
 newmtl FuelPressure1Mtl
 Material Color
-Ka 0.373615 0.368591 0.383775
-Kd 0.373615 0.368591 0.383775
-Ks 0.249077 0.245727 0.25585 
+Ka 0.82 0.82 0.85
+Kd 0.82 0.82 0.85
+Ks 0.95 0.95 0.95
 
 d 1
 
-Ns 255
-
-map_Ka FuelPressure1_diff.png
-map_Kd FuelPressure1_diff.png
-map_d FuelPressure1_diff.png
-
-map_Bump FuelPressure1_nmap.png
-
-map_Ns FuelPressure1_spec.png
+Ns 40
 
 newmtl Meshesbmwglasslhlglasslhl0021Mtl
 Material Color

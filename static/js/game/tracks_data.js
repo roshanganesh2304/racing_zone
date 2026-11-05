@@ -12,8 +12,9 @@ window.RacingTracks = {
     highwayCode: 'CA I-10 WESTBOUND EXPRESSWAY',
     heroImage: '/static/images/tracks/los-santos.jpg',
     biome: 'los_santos',
-    defaultTime: 'sunset',
-    availableTimes: ['sunset', 'day', 'night'],
+    vehicleRestriction: 'supercars_only',
+    defaultTime: 'day',
+    availableTimes: ['day', 'sunset', 'night'],
     trafficDensity: 'Heavy (85%)',
     trafficLevel: 4, // 1 to 5
     policeThreat: '3-Star Interceptor Patrol',
@@ -21,7 +22,7 @@ window.RacingTracks = {
     surfaceGrip: 'Dry Racing Asphalt (100%)',
     worldWidth: 3200,
     worldHeight: 2600,
-    roadWidth: 28,
+    roadWidth: 36,
     surfaceColor: 0x1a1d24,
     lineColor: 0xffffff,
     centerLineColor: 0xffd600,
@@ -68,8 +69,9 @@ window.RacingTracks = {
     highwayCode: 'A1A OCEAN DRIVE STRIP',
     heroImage: '/static/images/tracks/vice-city.jpg',
     biome: 'vice_city',
-    defaultTime: 'night',
-    availableTimes: ['night', 'sunset', 'day'],
+    vehicleRestriction: 'supercars_only',
+    defaultTime: 'sunset',
+    availableTimes: ['sunset', 'night', 'day'],
     trafficDensity: 'Dense Coastal Flow (75%)',
     trafficLevel: 3,
     policeThreat: '2-Star Marina Patrol',
@@ -77,7 +79,7 @@ window.RacingTracks = {
     surfaceGrip: 'Rain-Slicked Neon (92%)',
     worldWidth: 3000,
     worldHeight: 2400,
-    roadWidth: 26,
+    roadWidth: 36,
     surfaceColor: 0x1a2130,
     lineColor: 0x00f0ff,
     centerLineColor: 0xff007f,
@@ -124,6 +126,7 @@ window.RacingTracks = {
     highwayCode: 'NY I-95 MIDTOWN EXPRESSWAY',
     heroImage: '/static/images/tracks/liberty-city.jpg',
     biome: 'liberty_city',
+    vehicleRestriction: 'supercars_only',
     defaultTime: 'night',
     availableTimes: ['night', 'day', 'sunset'],
     trafficDensity: 'Gridlock Heavy (90%)',
@@ -133,7 +136,7 @@ window.RacingTracks = {
     surfaceGrip: 'Wet Manhattan Tarmac (88%)',
     worldWidth: 3000,
     worldHeight: 2500,
-    roadWidth: 27,
+    roadWidth: 36,
     surfaceColor: 0x15161c,
     lineColor: 0xffffff,
     centerLineColor: 0xffd600,
@@ -180,6 +183,7 @@ window.RacingTracks = {
     highwayCode: 'NV I-15 CASINO FREEWAY',
     heroImage: '/static/images/tracks/las-venturas.jpg',
     biome: 'las_venturas',
+    vehicleRestriction: 'supercars_only',
     defaultTime: 'night',
     availableTimes: ['night', 'sunset', 'day'],
     trafficDensity: 'Moderate Strip Traffic (70%)',
@@ -189,7 +193,7 @@ window.RacingTracks = {
     surfaceGrip: 'Dry Rubbered Asphalt (100%)',
     worldWidth: 3200,
     worldHeight: 2600,
-    roadWidth: 28,
+    roadWidth: 36,
     surfaceColor: 0x1d1e26,
     lineColor: 0xffffff,
     centerLineColor: 0xffb703,
@@ -236,6 +240,7 @@ window.RacingTracks = {
     highwayCode: 'US ROUTE 68 DESERT HIGHWAY',
     heroImage: '/static/images/tracks/blaine-county.jpg',
     biome: 'blaine_county',
+    vehicleRestriction: 'supercars_only',
     defaultTime: 'day',
     availableTimes: ['day', 'sunset', 'night'],
     trafficDensity: 'Rural Highway Traffic (55%)',
@@ -245,7 +250,7 @@ window.RacingTracks = {
     surfaceGrip: 'Sun-Baked Desert Tarmac (95%)',
     worldWidth: 3400,
     worldHeight: 2800,
-    roadWidth: 26,
+    roadWidth: 36,
     surfaceColor: 0x24201c,
     lineColor: 0xffffff,
     centerLineColor: 0xffb703,
@@ -281,6 +286,75 @@ window.RacingTracks = {
       { x: -130, z: 264, angle: Math.PI / 2 },
       { x: -170, z: 256, angle: Math.PI / 2 },
       { x: -210, z: 264, angle: Math.PI / 2 }
+    ]
+  },
+
+  'monza-f1': {
+    slug: 'monza-f1',
+    name: 'Monza: Temple of Speed',
+    country: 'Lombardy, Italy (Autodromo Nazionale Monza)',
+    district: 'Parco di Monza Grand Prix Circuit',
+    highwayCode: 'AUTODROMO NAZIONALE MONZA GP',
+    heroImage: '/static/images/tracks/monza.jpg',
+    biome: 'monza_f1',
+    isF1Track: true,
+    vehicleRestriction: 'f1_only',
+    defaultTime: 'day',
+    availableTimes: ['day', 'sunset', 'night'],
+    trafficDensity: 'None (Grand Prix Grid)',
+    trafficLevel: 0,
+    policeThreat: 'None (FIA Safety Car)',
+    recommendedHp: 980,
+    surfaceGrip: 'Pirelli P-Zero Ultra-Soft (100%)',
+    worldWidth: 3600,
+    worldHeight: 3000,
+    roadWidth: 32,
+    surfaceColor: 0x1e222a,
+    lineColor: 0xffffff,
+    centerLineColor: 0xffffff,
+    curbColorA: 0xd90429,
+    curbColorB: 0xffffff,
+    terrainColor: 0x1b3b24,
+    laps: 3,
+    length_km: 5.79,
+    difficulty: 'Extreme',
+    cashReward: 5000,
+    xpReward: 1800,
+    drsZones: [
+      { startWp: 0, endWp: 2, label: 'DRS ZONE 1: RETTIFILO STRAIGHT' },
+      { startWp: 8, endWp: 10, label: 'DRS ZONE 2: SERRAGLIO STRAIGHT' }
+    ],
+    sectors: [
+      { sector: 1, endWp: 4, name: 'SECTOR 1 (Rettifilo & Curva Grande)' },
+      { sector: 2, endWp: 8, name: 'SECTOR 2 (Roggia & Lesmo 1 & 2)' },
+      { sector: 3, endWp: 12, name: 'SECTOR 3 (Ascari & Parabolica)' }
+    ],
+    objectives: [
+      { text: 'Finish 1st Place at Italian GP', reward: '+$3,000 Cash', icon: '🏆' },
+      { text: 'Surpass 220+ MPH down Rettifilo', reward: '+$1,200 Cash', icon: '⚡' },
+      { text: 'Clip Apexes through Variante Ascari', reward: '+800 XP', icon: '🏁' }
+    ],
+    description: 'The legendary Temple of Speed featuring the flat-out Rettifilo straight, Variante del Rettifilo chicane, Curva Grande, Roggia, Lesmo 1 & 2, Serraglio, Variante Ascari, and the high-speed Curva Parabolica.',
+    waypoints: [
+      { x: -340, z: 260 }, // 0: Start / Finish line on Rettifilo straight
+      { x: -60, z: 260 },  // 1: Rettifilo flat-out DRS Zone 1
+      { x: 240, z: 260 },  // 2: Speed Trap 1 & 100m brake board
+      { x: 410, z: 220 },  // 3: Variante del Rettifilo (Turns 1 & 2 Chicane)
+      { x: 420, z: 80 },   // 4: Curva Grande (Turn 3 sweeping flat-out right)
+      { x: 340, z: -70 },  // 5: Approach to Roggia
+      { x: 380, z: -170 }, // 6: Variante della Roggia (Turns 4 & 5 Chicane)
+      { x: 220, z: -290 }, // 7: Curva di Lesmo 1 (Turn 6)
+      { x: 40, z: -330 },  // 8: Curva di Lesmo 2 (Turn 7)
+      { x: -160, z: -320 },// 9: Serraglio DRS straight (under bridge)
+      { x: -330, z: -210 },// 10: Variante Ascari entry (Turns 8, 9, 10)
+      { x: -390, z: -40 }, // 11: Ascari exit straight
+      { x: -410, z: 120 }  // 12: Curva Parabolica / Alboreto (Turn 11) sweeping onto straight
+    ],
+    startGrid: [
+      { x: -80, z: 256, angle: Math.PI / 2 },
+      { x: -120, z: 264, angle: Math.PI / 2 },
+      { x: -160, z: 256, angle: Math.PI / 2 },
+      { x: -200, z: 264, angle: Math.PI / 2 }
     ]
   }
 };

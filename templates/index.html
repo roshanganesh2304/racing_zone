@@ -33,16 +33,16 @@
         <div class="rotate-arrow-indicator">🔄</div>
       </div>
       <div class="rotate-brand-badge">RACING ZONE GT</div>
-      <h2 class="rotate-prompt-title">PLEASE ROTATE YOUR DEVICE</h2>
+      <h2 class="rotate-prompt-title">ROTATE TO LANDSCAPE</h2>
       <p class="rotate-prompt-desc">
-        Racing Zone is designed for high-performance <strong>Widescreen Landscape Mode</strong>. Rotate your device to enter the game!
+        Racing Zone is engineered <strong>strictly for Landscape Mode</strong> on mobile. Turn your device horizontally to enter the game!
       </p>
       <button class="btn btn-primary btn-rotate-action" id="btnRequestLandscape">
         <span>⛶</span> Rotate to Landscape
       </button>
-      <button class="btn-rotate-dismiss-subtle" id="btnContinuePortrait">
-        Continue in portrait anyway
-      </button>
+      <div class="rotate-sub-hint">
+        <span>💡 If your screen does not rotate, please enable <strong>Auto-Rotate</strong> in your device settings.</span>
+      </div>
     </div>
   </div>
 
@@ -184,6 +184,13 @@
             </div>
           </div>
 
+          <!-- Garage Category Filter Tabs: Dedicated Formula 1 Section -->
+          <div class="garage-category-tabs" id="garageCategoryTabs">
+            <button type="button" class="garage-cat-btn" data-cat="all">🏆 All Vehicles</button>
+            <button type="button" class="garage-cat-btn active" data-cat="Formula 1">🏁 Formula 1</button>
+            <button type="button" class="garage-cat-btn" data-cat="Supercars">🏎️ Supercars & GT</button>
+          </div>
+
           <div class="car-carousel-controls">
             <button class="carousel-nav-btn" id="btnPrevCar">‹</button>
             <div class="car-selector-strip" id="carThumbnailsStrip"></div>
@@ -267,6 +274,18 @@
 
             <div style="margin-top: 0.8rem; font-size: 0.8rem; color: var(--text-muted);">
               <strong>Engine:</strong> <span id="statEngineType">4.0L Naturally Aspirated Flat-6</span>
+            </div>
+          </div>
+
+          <!-- F1 Official Livery Notice (replaces Paint Studio for Formula 1 cars) -->
+          <div class="panel-card" id="f1OfficialLiveryCard" style="display: none;">
+            <div class="panel-heading">
+              <span>Racing Livery</span>
+              <span class="paint-status-badge f1-badge" style="background: rgba(255, 0, 50, 0.15); color: #ff3344; border: 1px solid rgba(255, 0, 50, 0.35);">🏁 Official Livery</span>
+            </div>
+            <div style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; padding: 0.4rem 0;">
+              <div style="font-weight: 600; color: #fff; margin-bottom: 0.25rem;" id="f1LiveryTeamName">Scuderia Ferrari Livery</div>
+              <div>Formula 1 race cars feature authentic team liveries and manufacturer decals. Color customization is disabled under official FIA championship regulations.</div>
             </div>
           </div>
 
@@ -488,6 +507,31 @@
                   </div>
                 </div>
 
+                <!-- F1 Grand Prix Official Lap Timer & Sector Signals Display -->
+                <div class="hud-panel f1-timing-signals-box" id="f1TimingSignalsBox" style="display: none;">
+                  <div class="f1-timing-header">
+                    <span class="f1-badge-pill">F1 TIMING</span>
+                    <span class="f1-delta-val" id="f1DeltaVal">Δ -0.000</span>
+                  </div>
+                  <div class="f1-sector-splits">
+                    <div class="f1-sector-chip" id="f1Sector1">
+                      <span class="sec-label">S1</span>
+                      <span class="sec-val" id="f1Sector1Val">--.---</span>
+                    </div>
+                    <div class="f1-sector-chip" id="f1Sector2">
+                      <span class="sec-label">S2</span>
+                      <span class="sec-val" id="f1Sector2Val">--.---</span>
+                    </div>
+                    <div class="f1-sector-chip" id="f1Sector3">
+                      <span class="sec-label">S3</span>
+                      <span class="sec-val" id="f1Sector3Val">--.---</span>
+                    </div>
+                  </div>
+                  <div class="f1-drs-status-badge" id="f1DrsStatusBadge">
+                    <span id="f1DrsIndicator">⚪ DRS 400M</span>
+                  </div>
+                </div>
+
                 <!-- GTA Radio Station Badge -->
                 <div class="hud-panel hud-clickable-btn" id="hudRadioBtn" title="Switch Radio Station [R]"
                   onclick="racingApp.gameEngine && racingApp.gameEngine.toggleRadioStation()">
@@ -568,18 +612,27 @@
             <span class="drift-score-val" id="hudDriftScoreVal">0 PTS</span>
           </div>
 
-          <!-- Orientation Tip Prompt for Mobile Portrait -->
-          <div class="landscape-prompt" id="landscapePrompt">
-            <div class="landscape-prompt-content">
-              <span class="rotate-icon">🔄</span>
-              <span class="rotate-text">Rotate to <strong>Landscape</strong> for widescreen racing!</span>
-              <button class="rotate-dismiss" id="btnDismissRotate" aria-label="Dismiss">✕</button>
-            </div>
-          </div>
-
           <!-- Countdown 3..2..1..GO Overlay -->
           <div class="countdown-overlay" id="countdownOverlay">
             <div class="countdown-number" id="countdownNumber">3</div>
+          </div>
+
+          <!-- FIA F1 5-Red-Light Starting Gantry Overlay -->
+          <div class="f1-gantry-overlay" id="f1GantryOverlay" style="display: none;">
+            <div class="f1-gantry-bezel">
+              <div class="f1-gantry-top-bar">
+                <span>FIA FORMULA 1 WORLD CHAMPIONSHIP</span>
+                <span class="f1-gp-title" id="f1GantryGpTitle">ITALIAN GRAND PRIX • MONZA</span>
+              </div>
+              <div class="f1-lights-row">
+                <div class="f1-lamp-col" id="f1Light1"><div class="f1-lamp-light"></div><div class="f1-lamp-light"></div></div>
+                <div class="f1-lamp-col" id="f1Light2"><div class="f1-lamp-light"></div><div class="f1-lamp-light"></div></div>
+                <div class="f1-lamp-col" id="f1Light3"><div class="f1-lamp-light"></div><div class="f1-lamp-light"></div></div>
+                <div class="f1-lamp-col" id="f1Light4"><div class="f1-lamp-light"></div><div class="f1-lamp-light"></div></div>
+                <div class="f1-lamp-col" id="f1Light5"><div class="f1-lamp-light"></div><div class="f1-lamp-light"></div></div>
+              </div>
+              <div class="f1-gantry-status" id="f1GantryStatus">STAND BY FOR START</div>
+            </div>
           </div>
 
           <!-- Bottom HUD Cluster -->
@@ -815,30 +868,6 @@
     </section>
 
   </main>
- 
-   <!-- Mobile Bottom Navigation Bar (Visible on mobile portrait/tablet outside race) -->
-   <nav class="mobile-bottom-nav" id="mobileBottomNav">
-     <a class="mobile-nav-item active" data-nav="home">
-       <span class="mobile-nav-icon">🏠</span>
-       <span class="mobile-nav-label">Home</span>
-     </a>
-     <a class="mobile-nav-item" data-nav="tracks">
-       <span class="mobile-nav-icon">🏁</span>
-       <span class="mobile-nav-label">Tracks</span>
-     </a>
-     <a class="mobile-nav-item" data-nav="garage">
-       <span class="mobile-nav-icon">🏎️</span>
-       <span class="mobile-nav-label">Garage</span>
-     </a>
-     <a class="mobile-nav-item" data-nav="leaderboard">
-       <span class="mobile-nav-icon">🏆</span>
-       <span class="mobile-nav-label">Ranks</span>
-     </a>
-     <a class="mobile-nav-item" data-nav="career">
-       <span class="mobile-nav-icon">👤</span>
-       <span class="mobile-nav-label">Career</span>
-     </a>
-   </nav>
 
   <!-- Race Results Modal -->
   <div class="modal-backdrop" id="resultsModal">
@@ -934,19 +963,19 @@
   <script src="/static/js/loaders/FBXLoader.js"></script>
   <script src="/static/js/loaders/MTLLoader.js"></script>
   <script src="/static/js/loaders/OBJLoader.js"></script>
-  <script src="/static/js/audio.js"></script>
-  <script src="/static/js/game/car_models.js"></script>
-  <script src="/static/js/game/car_models_3d.js"></script>
-  <script src="/static/js/game/character_3d.js"></script>
-  <script src="/static/js/game/world_3d.js"></script>
-  <script src="/static/js/game/traffic_police_3d.js"></script>
-  <script src="/static/js/game/tracks_data.js"></script>
-  <script src="/static/js/game/physics.js"></script>
-  <script src="/static/js/game/ai.js"></script>
-  <script src="/static/js/game/engine_3d.js"></script>
-  <script src="/static/js/game/engine.js"></script>
-  <script src="/static/js/api.js"></script>
-  <script src="/static/js/app.js"></script>
+  <script src="/static/js/audio.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/game/car_models.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/game/car_models_3d.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/game/character_3d.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/game/world_3d.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/game/traffic_police_3d.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/game/tracks_data.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/game/physics.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/game/ai.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/game/engine_3d.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/game/engine.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/api.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/app.js?v=20261105_f1_livery_locked"></script>
 </body>
 
 </html>

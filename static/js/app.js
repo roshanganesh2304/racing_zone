@@ -9,7 +9,8 @@ class RacingApp {
     this.cars = [];
     this.tracks = [];
     this.selectedCarIndex = 0;
-    this.selectedTrackSlug = 'los-santos';
+    this.selectedTrackSlug = 'monza-f1';
+    this.garageCategory = 'Formula 1';
     this.trackTimePrefs = {};
     this.gameEngine = null;
 
@@ -36,6 +37,7 @@ class RacingApp {
   }
 
   async init() {
+    this.initMobileOrientationEnforcement();
     this.bindNavigation();
     this.bindAuthModal();
     this.bindGarageControls();
@@ -81,9 +83,18 @@ class RacingApp {
       this.cars = carsData;
       this.tracks = tracksData;
 
-      // Find currently selected car
+      // Find currently selected car or default to Ferrari F1-75
       const activeIdx = this.cars.findIndex(c => c.is_selected);
-      if (activeIdx !== -1) this.selectedCarIndex = activeIdx;
+      if (activeIdx !== -1) {
+        this.selectedCarIndex = activeIdx;
+      } else {
+        const ferrariIdx = this.cars.findIndex(c => c.slug === 'f1-2022-ferrari');
+        if (ferrariIdx !== -1) this.selectedCarIndex = ferrariIdx;
+      }
+      const curCar = this.cars[this.selectedCarIndex];
+      if (curCar && (curCar.category === 'Formula 1' || curCar.slug.startsWith('f1-'))) {
+        this.garageCategory = 'Formula 1';
+      }
 
       this.updateNavbarUser();
       this.renderTracksList();
@@ -109,40 +120,75 @@ class RacingApp {
         this.toggleAudio();
       });
     }
-    // Dismiss landscape rotate banner
-    const btnDismissRotate = document.getElementById('btnDismissRotate');
-    if (btnDismissRotate) {
-      btnDismissRotate.addEventListener('click', () => {
-        const prompt = document.getElementById('landscapePrompt');
-        if (prompt) prompt.style.display = 'none';
+    this.updateAudioButtons(window.racingAudio ? window.racingAudio.isMuted : false);
+  }
+
+  initMobileOrientationEnforcement() {
+    this.enforceMobileOrientation();
+
+    window.addEventListener('resize', () => {
+      this.enforceMobileOrientation();
+    });
+
+    window.addEventListener('orientationchange', () => {
+      setTimeout(() => this.enforceMobileOrientation(), 100);
+      setTimeout(() => this.enforceMobileOrientation(), 350);
+    });
+
+    if (screen.orientation && screen.orientation.addEventListener) {
+      screen.orientation.addEventListener('change', () => {
+        this.enforceMobileOrientation();
       });
     }
 
-    // Fullscreen Mobile Landscape Lock Buttons
     const btnReqLandscape = document.getElementById('btnRequestLandscape');
     if (btnReqLandscape) {
-      btnReqLandscape.addEventListener('click', async () => {
-        try {
-          if (document.documentElement.requestFullscreen) {
-            await document.documentElement.requestFullscreen();
-          }
-          if (screen.orientation && screen.orientation.lock) {
-            await screen.orientation.lock('landscape');
-          }
-        } catch (err) {
-          console.log('Orientation lock requires physical rotation:', err);
-        }
+      btnReqLandscape.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await this.requestLandscapeOrientation();
       });
     }
+  }
 
-    const btnContinuePortrait = document.getElementById('btnContinuePortrait');
-    if (btnContinuePortrait) {
-      btnContinuePortrait.addEventListener('click', () => {
-        document.body.classList.add('portrait-override');
-      });
+  enforceMobileOrientation() {
+    const isMobileDevice = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+      (('ontouchstart' in window || navigator.maxTouchPoints > 0) && window.innerWidth <= 1024);
+
+    const isPortrait = window.innerHeight > window.innerWidth;
+    const overlay = document.getElementById('mobileRotateOverlay');
+
+    if (isMobileDevice && isPortrait) {
+      document.body.classList.add('mobile-portrait-active');
+      document.body.classList.remove('mobile-landscape-active');
+      if (overlay) overlay.style.display = 'flex';
+    } else {
+      document.body.classList.remove('mobile-portrait-active');
+      document.body.classList.add('mobile-landscape-active');
+      if (overlay) overlay.style.display = 'none';
+    }
+  }
+
+  async requestLandscapeOrientation() {
+    try {
+      const docEl = document.documentElement;
+      if (docEl.requestFullscreen) {
+        await docEl.requestFullscreen().catch(() => {});
+      } else if (docEl.webkitRequestFullscreen) {
+        await docEl.webkitRequestFullscreen().catch(() => {});
+      } else if (docEl.msRequestFullscreen) {
+        await docEl.msRequestFullscreen().catch(() => {});
+      }
+    } catch (_) {}
+
+    try {
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock('landscape').catch(() => {});
+      }
+    } catch (err) {
+      console.log('Orientation lock requires physical rotation:', err);
     }
 
-    this.updateAudioButtons(window.racingAudio ? window.racingAudio.isMuted : false);
+    this.enforceMobileOrientation();
   }
 
   toggleAudio() {
@@ -253,18 +299,20 @@ class RacingApp {
     const featuredCar = this.cars[this.selectedCarIndex] || this.cars[0];
     if (!featuredCar) return;
 
-    const carColor = featuredCar.custom_color || featuredCar.default_color;
+    const isF1Car = featuredCar.category === 'Formula 1' || featuredCar.slug.startsWith('f1-') || featuredCar.slug === 'mclaren-mp45';
+    const isCustomPaint = !isF1Car && !!(featuredCar.custom_color && featuredCar.custom_color.toLowerCase() !== (featuredCar.default_color || '').toLowerCase());
+    const carColor = isF1Car ? (featuredCar.default_color || '#c00000') : (featuredCar.custom_color || featuredCar.default_color);
 
     const existingMesh = this.heroCarGroup.children[0];
     if (existingMesh && existingMesh.userData && existingMesh.userData.slug === featuredCar.slug) {
       if (window.CarModels3D && window.CarModels3D.updateVehicleColor) {
-        window.CarModels3D.updateVehicleColor(existingMesh, carColor, featuredCar.slug);
+        window.CarModels3D.updateVehicleColor(existingMesh, carColor, featuredCar.slug, isCustomPaint);
       }
     } else {
       while (this.heroCarGroup.children.length > 0) {
         this.heroCarGroup.remove(this.heroCarGroup.children[0]);
       }
-      const car3DMesh = window.CarModels3D.createVehicleMesh(featuredCar.slug, carColor);
+      const car3DMesh = window.CarModels3D.createVehicleMesh(featuredCar.slug, carColor, { isCustomPaint });
       this.heroCarGroup.add(car3DMesh);
     }
 
@@ -282,11 +330,35 @@ class RacingApp {
     const prevBtn = document.getElementById('btnPrevCar');
     const nextBtn = document.getElementById('btnNextCar');
 
+    // Garage Category Filter Tabs (Formula 1, Supercars, All)
+    const catBtns = document.querySelectorAll('.garage-cat-btn');
+    catBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        catBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        this.garageCategory = btn.getAttribute('data-cat') || 'all';
+
+        const filtered = this.getFilteredGarageCars();
+        if (filtered.length > 0 && !filtered.some(c => this.cars.indexOf(c) === this.selectedCarIndex)) {
+          this.selectedCarIndex = this.cars.indexOf(filtered[0]);
+        }
+        if (this.showroomCarGroup) this.showroomCarGroup.rotation.y = -0.55;
+        this.renderGarageShowroom();
+      });
+    });
+
     if (prevBtn) {
       prevBtn.addEventListener('click', () => {
         this.pendingPaintColor = null;
         this.pendingPaintCarIndex = -1;
-        this.selectedCarIndex = (this.selectedCarIndex - 1 + this.cars.length) % this.cars.length;
+        const filtered = this.getFilteredGarageCars();
+        if (filtered.length > 0) {
+          const currentLocal = filtered.findIndex(c => this.cars.indexOf(c) === this.selectedCarIndex);
+          const nextLocal = (currentLocal - 1 + filtered.length) % filtered.length;
+          this.selectedCarIndex = this.cars.indexOf(filtered[nextLocal]);
+        } else {
+          this.selectedCarIndex = (this.selectedCarIndex - 1 + this.cars.length) % this.cars.length;
+        }
         if (this.showroomCarGroup) this.showroomCarGroup.rotation.y = -0.55;
         if (window.racingAudio && window.racingAudio.playWhooshNearMiss) window.racingAudio.playWhooshNearMiss();
         this.renderGarageShowroom();
@@ -297,7 +369,14 @@ class RacingApp {
       nextBtn.addEventListener('click', () => {
         this.pendingPaintColor = null;
         this.pendingPaintCarIndex = -1;
-        this.selectedCarIndex = (this.selectedCarIndex + 1) % this.cars.length;
+        const filtered = this.getFilteredGarageCars();
+        if (filtered.length > 0) {
+          const currentLocal = filtered.findIndex(c => this.cars.indexOf(c) === this.selectedCarIndex);
+          const nextLocal = (currentLocal + 1) % filtered.length;
+          this.selectedCarIndex = this.cars.indexOf(filtered[nextLocal]);
+        } else {
+          this.selectedCarIndex = (this.selectedCarIndex + 1) % this.cars.length;
+        }
         if (this.showroomCarGroup) this.showroomCarGroup.rotation.y = -0.55;
         if (window.racingAudio && window.racingAudio.playWhooshNearMiss) window.racingAudio.playWhooshNearMiss();
         this.renderGarageShowroom();
@@ -396,6 +475,12 @@ class RacingApp {
     const car = this.cars[this.selectedCarIndex];
     if (!car) return;
 
+    // Formula 1 race cars use official FIA team liveries and have no color-changing option
+    const isF1Car = car.category === 'Formula 1' || car.slug.startsWith('f1-') || car.slug === 'mclaren-mp45';
+    if (isF1Car) {
+      return;
+    }
+
     // Colour changing only allowed if car is purchased
     if (!car.is_unlocked) {
       alert('This vehicle is locked! Purchase the car to unlock the Paint Studio.');
@@ -407,8 +492,9 @@ class RacingApp {
 
     // Real-time live 3D preview on the turntable
     const carMesh = this.showroomCarGroup && this.showroomCarGroup.children[0];
+    const isCustom = (color.toLowerCase() !== (car.default_color || '').toLowerCase());
     if (carMesh && window.CarModels3D && window.CarModels3D.updateVehicleColor) {
-      window.CarModels3D.updateVehicleColor(carMesh, color, car.slug);
+      window.CarModels3D.updateVehicleColor(carMesh, color, car.slug, isCustom);
     }
 
     // Highlight active swatch & update custom picker input
@@ -442,6 +528,9 @@ class RacingApp {
   async saveCustomPaint() {
     const car = this.cars[this.selectedCarIndex];
     if (!car || !car.is_unlocked || !this.pendingPaintColor) return;
+
+    const isF1Car = car.category === 'Formula 1' || car.slug.startsWith('f1-') || car.slug === 'mclaren-mp45';
+    if (isF1Car) return;
 
     const saveBtn = document.getElementById('btnSavePaint');
     const saveText = document.getElementById('btnSavePaintText');
@@ -488,6 +577,9 @@ class RacingApp {
     const car = this.cars[this.selectedCarIndex];
     if (!car) return;
 
+    const isF1Car = car.category === 'Formula 1' || car.slug.startsWith('f1-') || car.slug === 'mclaren-mp45';
+    if (isF1Car) return;
+
     if (!car.is_unlocked) {
       alert('This vehicle is locked! Purchase the car to unlock the Paint Studio.');
       return;
@@ -500,7 +592,7 @@ class RacingApp {
     // Apply factory color live on 3D showroom model
     const carMesh = this.showroomCarGroup && this.showroomCarGroup.children[0];
     if (carMesh && window.CarModels3D && window.CarModels3D.updateVehicleColor) {
-      window.CarModels3D.updateVehicleColor(carMesh, factoryColor, car.slug);
+      window.CarModels3D.updateVehicleColor(carMesh, factoryColor, car.slug, false);
     }
 
     try {
@@ -566,6 +658,16 @@ class RacingApp {
     document.getElementById('showroomCarName').textContent = car.name;
     document.getElementById('showroomCategory').textContent = car.category;
 
+    // Sync active category button state
+    document.querySelectorAll('.garage-cat-btn').forEach(btn => {
+      const cat = btn.getAttribute('data-cat');
+      if (this.garageCategory === cat) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    });
+
     // Real Life Specs
     document.getElementById('statTopSpeedMph').textContent = `${car.top_speed_mph} MPH`;
     document.getElementById('statTopSpeedKmh').textContent = `${Math.round(car.top_speed_mph * 1.609)} KM/H`;
@@ -603,45 +705,70 @@ class RacingApp {
       }
     }
 
-    // Paint Studio: Only allow color changing if car is purchased
+    // Formula 1 race cars use official FIA race liveries and have no color-changing option
+    const isF1Car = car.category === 'Formula 1' || car.slug.startsWith('f1-') || car.slug === 'mclaren-mp45';
+    const f1LiveryCard = document.getElementById('f1OfficialLiveryCard');
+    const f1LiveryTeamName = document.getElementById('f1LiveryTeamName');
+    const paintStudioCard = document.getElementById('paintStudioCard');
     const paintLockedBanner = document.getElementById('paintLockedBanner');
     const paintControls = document.getElementById('paintStudioControls');
     const savePaintBtn = document.getElementById('btnSavePaint');
     const savePaintText = document.getElementById('btnSavePaintText');
     const statusBadge = document.getElementById('paintStudioStatusBadge');
 
-    if (!car.is_unlocked) {
-      if (paintLockedBanner) paintLockedBanner.style.display = 'flex';
-      if (paintControls) paintControls.classList.add('disabled');
-      if (statusBadge) {
-        statusBadge.textContent = '🔒 Locked';
-        statusBadge.className = 'paint-status-badge locked';
+    if (isF1Car) {
+      if (f1LiveryCard) {
+        f1LiveryCard.style.display = 'block';
+        if (f1LiveryTeamName) {
+          f1LiveryTeamName.textContent = `${car.brand} • ${car.name}`;
+        }
       }
-      if (savePaintBtn) {
-        savePaintBtn.disabled = true;
-        savePaintBtn.classList.remove('has-changes');
+      if (paintStudioCard) {
+        paintStudioCard.style.display = 'none';
       }
       this.pendingPaintColor = null;
       this.pendingPaintCarIndex = -1;
     } else {
-      if (paintLockedBanner) paintLockedBanner.style.display = 'none';
-      if (paintControls) paintControls.classList.remove('disabled');
-      if (statusBadge) {
-        const isCustom = car.custom_color && car.custom_color.toLowerCase() !== car.default_color.toLowerCase();
-        statusBadge.textContent = isCustom ? '🎨 Custom' : '🎨 Factory';
-        statusBadge.className = 'paint-status-badge';
+      if (f1LiveryCard) {
+        f1LiveryCard.style.display = 'none';
+      }
+      if (paintStudioCard) {
+        paintStudioCard.style.display = 'block';
       }
 
-      // Check if we have an unsaved pending paint for this car
-      const hasPending = this.pendingPaintColor && this.pendingPaintCarIndex === this.selectedCarIndex;
-      if (savePaintBtn) {
-        savePaintBtn.disabled = !hasPending;
-        if (hasPending) {
-          savePaintBtn.classList.add('has-changes');
-          if (savePaintText) savePaintText.textContent = 'Save Paint';
-        } else {
+      if (!car.is_unlocked) {
+        if (paintLockedBanner) paintLockedBanner.style.display = 'flex';
+        if (paintControls) paintControls.classList.add('disabled');
+        if (statusBadge) {
+          statusBadge.textContent = '🔒 Locked';
+          statusBadge.className = 'paint-status-badge locked';
+        }
+        if (savePaintBtn) {
+          savePaintBtn.disabled = true;
           savePaintBtn.classList.remove('has-changes');
-          if (savePaintText) savePaintText.textContent = 'Save Paint';
+        }
+        this.pendingPaintColor = null;
+        this.pendingPaintCarIndex = -1;
+      } else {
+        if (paintLockedBanner) paintLockedBanner.style.display = 'none';
+        if (paintControls) paintControls.classList.remove('disabled');
+        if (statusBadge) {
+          const isCustom = car.custom_color && car.custom_color.toLowerCase() !== car.default_color.toLowerCase();
+          statusBadge.textContent = isCustom ? '🎨 Custom' : '🎨 Factory';
+          statusBadge.className = 'paint-status-badge';
+        }
+
+        // Check if we have an unsaved pending paint for this car
+        const hasPending = this.pendingPaintColor && this.pendingPaintCarIndex === this.selectedCarIndex;
+        if (savePaintBtn) {
+          savePaintBtn.disabled = !hasPending;
+          if (hasPending) {
+            savePaintBtn.classList.add('has-changes');
+            if (savePaintText) savePaintText.textContent = 'Save Paint';
+          } else {
+            savePaintBtn.classList.remove('has-changes');
+            if (savePaintText) savePaintText.textContent = 'Save Paint';
+          }
         }
       }
     }
@@ -672,19 +799,30 @@ class RacingApp {
     this.updateShowroom3DCar();
   }
 
+  getFilteredGarageCars() {
+    if (!this.cars || this.cars.length === 0) return [];
+    if (!this.garageCategory || this.garageCategory === 'all') return this.cars;
+    if (this.garageCategory === 'Formula 1') {
+      return this.cars.filter(c => c.category === 'Formula 1' || c.slug.startsWith('f1-') || c.slug === 'mclaren-mp45');
+    }
+    return this.cars.filter(c => c.category !== 'Formula 1' && !c.slug.startsWith('f1-') && c.slug !== 'mclaren-mp45');
+  }
+
   renderCarThumbnailsStrip() {
     const strip = document.getElementById('carThumbnailsStrip');
     if (!strip) return;
     strip.innerHTML = '';
 
-    this.cars.forEach((c, idx) => {
+    const displayCars = this.getFilteredGarageCars();
+    displayCars.forEach((c) => {
+      const globalIdx = this.cars.indexOf(c);
       const chip = document.createElement('div');
-      chip.className = `car-thumb-chip ${idx === this.selectedCarIndex ? 'active' : ''}`;
+      chip.className = `car-thumb-chip ${globalIdx === this.selectedCarIndex ? 'active' : ''}`;
       chip.textContent = `${c.brand} ${c.name}`;
       chip.addEventListener('click', () => {
         this.pendingPaintColor = null;
         this.pendingPaintCarIndex = -1;
-        this.selectedCarIndex = idx;
+        this.selectedCarIndex = globalIdx;
         if (this.showroomCarGroup) this.showroomCarGroup.rotation.y = -0.55;
         this.renderGarageShowroom();
       });
@@ -841,15 +979,23 @@ class RacingApp {
     const car = this.cars[this.selectedCarIndex];
     if (!car) return;
 
-    const carColor = (this.pendingPaintColor && this.pendingPaintCarIndex === this.selectedCarIndex)
-      ? this.pendingPaintColor
-      : (car.custom_color || car.default_color);
+    const isF1Car = car.category === 'Formula 1' || car.slug.startsWith('f1-') || car.slug === 'mclaren-mp45';
+    const isCustomPaint = !isF1Car && !!(
+      (this.pendingPaintColor && this.pendingPaintCarIndex === this.selectedCarIndex && this.pendingPaintColor.toLowerCase() !== (car.default_color || '').toLowerCase()) ||
+      (car.custom_color && car.custom_color.toLowerCase() !== (car.default_color || '').toLowerCase())
+    );
+
+    const carColor = isF1Car
+      ? (car.default_color || '#c00000')
+      : ((this.pendingPaintColor && this.pendingPaintCarIndex === this.selectedCarIndex)
+          ? this.pendingPaintColor
+          : (car.custom_color || car.default_color));
 
     // If the active showroom car matches the selected car, update paint in real-time at 60 FPS
     const existingMesh = this.showroomCarGroup.children[0];
     if (existingMesh && existingMesh.userData && existingMesh.userData.slug === car.slug) {
       if (window.CarModels3D && window.CarModels3D.updateVehicleColor) {
-        window.CarModels3D.updateVehicleColor(existingMesh, carColor, car.slug);
+        window.CarModels3D.updateVehicleColor(existingMesh, carColor, car.slug, isCustomPaint);
         return;
       }
     }
@@ -858,7 +1004,7 @@ class RacingApp {
       this.showroomCarGroup.remove(this.showroomCarGroup.children[0]);
     }
 
-    const car3DMesh = window.CarModels3D.createVehicleMesh(car.slug, carColor);
+    const car3DMesh = window.CarModels3D.createVehicleMesh(car.slug, carColor, { isCustomPaint });
     this.showroomCarGroup.position.set(0, 0.02, 0);
     this.showroomCarGroup.rotation.y = -0.55;
     this.showroomCarGroup.add(car3DMesh);
@@ -1083,6 +1229,10 @@ class RacingApp {
       const isSelected = (track.slug === this.selectedTrackSlug);
       const heroImg = trackDef.heroImage || `/static/images/tracks/${track.slug}.jpg`;
       const diffClass = `difficulty-${track.difficulty.toLowerCase()}`;
+      const isF1Track = (track.slug === 'monza-f1' || trackDef.isF1Track || trackDef.vehicleRestriction === 'f1_only');
+      const badgeHtml = isF1Track
+        ? `<span class="track-restriction-badge f1-badge">🏁 F1 ONLY</span>`
+        : `<span class="track-restriction-badge street-badge">🏎️ SUPERCARS ONLY</span>`;
 
       const card = document.createElement('div');
       card.className = `carx-track-card ${isSelected ? 'active' : ''}`;
@@ -1097,7 +1247,7 @@ class RacingApp {
             <div class="carx-card-telemetry">
               <span>📏 ${track.length_km} KM</span>
               <span>🚗 ${trackDef.trafficDensity || 'Heavy Traffic'}</span>
-              <span>⚡ ${trackDef.recommendedHp || 500}+ HP</span>
+              ${badgeHtml}
             </div>
           </div>
         </div>
@@ -1139,12 +1289,33 @@ class RacingApp {
     const reqHp = trackDef.recommendedHp || 520;
     const isHpReady = carHp >= (reqHp - 40);
 
+    const isF1Track = (track.slug === 'monza-f1' || trackDef.isF1Track || trackDef.vehicleRestriction === 'f1_only');
+    const isF1Car = activeCar ? (activeCar.category === 'Formula 1' || activeCar.slug.startsWith('f1-') || activeCar.slug === 'mclaren-mp45') : false;
+    const isCarCompatible = isF1Track ? isF1Car : !isF1Car;
+
+    const restrictionBannerHtml = isCarCompatible ? '' : `
+      <div class="carx-track-restriction-banner ${isF1Track ? 'req-f1' : 'req-street'}">
+        <div class="res-banner-left">
+          <div class="res-icon">${isF1Track ? '🏁' : '🚫'}</div>
+          <div>
+            <div class="res-title">${isF1Track ? 'FORMULA 1 REGULATIONS ONLY' : 'PUBLIC HIGHWAY REGULATIONS'}</div>
+            <div class="res-desc">${isF1Track
+              ? 'Autodromo Nazionale Monza is strictly restricted to Formula 1 race cars. Street supercars and GT vehicles cannot enter this track.'
+              : 'Formula 1 open-wheel single-seaters are not street legal for public highway duels. Please equip a Supercar, GT, or Tuner vehicle.'}</div>
+          </div>
+        </div>
+        <button type="button" class="btn-res-autoswitch" id="btnResAutoSwitch">
+          ${isF1Track ? '🏎️ AUTO-EQUIP F1 CAR' : '🚗 AUTO-EQUIP SUPERCAR'}
+        </button>
+      </div>
+    `;
+
     stage.innerHTML = `
       <!-- Hero Highway Panoramic Banner -->
       <div class="carx-hero-banner" style="background-image: linear-gradient(180deg, rgba(6, 8, 14, 0.2) 0%, rgba(6, 8, 14, 0.88) 100%), url(${heroImg});">
         <div class="carx-banner-overlay-content">
           <div class="carx-hero-route-tag">
-            <span class="shield-icon">🛣️</span>
+            <span class="shield-icon">${isF1Track ? '🏁' : '🛣️'}</span>
             <span>${trackDef.highwayCode || 'INTERSTATE HIGHWAY'}</span>
           </div>
           <h2 class="carx-hero-title">${track.name}</h2>
@@ -1163,29 +1334,33 @@ class RacingApp {
           <span class="telemetry-label">TRAFFIC DENSITY</span>
           <div class="telemetry-val">${trackDef.trafficDensity || 'Heavy (85%)'}</div>
           <div class="traffic-bars-row">
-            <div class="bar-unit active"></div>
-            <div class="bar-unit active"></div>
-            <div class="bar-unit active"></div>
+            <div class="bar-unit ${trackDef.trafficLevel >= 1 ? 'active' : ''}"></div>
+            <div class="bar-unit ${trackDef.trafficLevel >= 2 ? 'active' : ''}"></div>
+            <div class="bar-unit ${trackDef.trafficLevel >= 3 ? 'active' : ''}"></div>
             <div class="bar-unit ${trackDef.trafficLevel >= 5 ? 'active' : ''}"></div>
           </div>
         </div>
 
         <div class="telemetry-box">
           <span class="telemetry-label">POLICE THREAT</span>
-          <div class="telemetry-val" style="color: #ffd600;">${trackDef.policeThreat || '3-Star Interceptors'}</div>
-          <div style="font-size: 0.72rem; color: #ff0055; font-weight: 800;">HIGHWAY PATROL ACTIVE</div>
+          <div class="telemetry-val" style="color: ${isF1Track ? '#00f0ff' : '#ffd600'};">${trackDef.policeThreat || '3-Star Interceptors'}</div>
+          <div style="font-size: 0.72rem; color: ${isF1Track ? '#00f59b' : '#ff0055'}; font-weight: 800;">
+            ${isF1Track ? 'FIA SAFETY CAR ONLY' : 'HIGHWAY PATROL ACTIVE'}
+          </div>
         </div>
 
         <div class="telemetry-box">
           <span class="telemetry-label">ROAD SURFACE</span>
           <div class="telemetry-val" style="color: #00f0ff;">${trackDef.surfaceGrip || 'Dry Asphalt (100%)'}</div>
-          <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700;">HIGH-SPEED TARMAC</div>
+          <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700;">
+            ${isF1Track ? 'PIRELLI F1 COMPOUND' : 'HIGH-SPEED TARMAC'}
+          </div>
         </div>
 
         <div class="telemetry-box">
           <span class="telemetry-label">SECTOR LENGTH</span>
           <div class="telemetry-val" style="color: #fff;">${track.length_km} KM</div>
-          <div style="font-size: 0.72rem; color: var(--accent-gold); font-weight: 800;">${track.laps} LAPS SPRINT</div>
+          <div style="font-size: 0.72rem; color: var(--accent-gold); font-weight: 800;">${track.laps} LAPS ${isF1Track ? 'GRAND PRIX' : 'SPRINT'}</div>
         </div>
       </div>
 
@@ -1215,12 +1390,17 @@ class RacingApp {
               <div style="font-weight: 800; color: #fff; font-size: 0.88rem;">${activeCar.brand} ${activeCar.name}</div>
               <div style="font-size: 0.75rem; color: var(--text-muted);">
                 ${carHp} HP vs Rec: ${reqHp} HP
-                <span class="hp-status-tag ${isHpReady ? 'ready' : 'tune'}">${isHpReady ? '✓ READY' : '⚠️ UPGRADE REC'}</span>
+                <span class="hp-status-tag ${isCarCompatible ? 'ready' : 'tune'}">
+                  ${isCarCompatible ? '✓ COMPATIBLE' : '⚠️ WRONG VEHICLE TYPE'}
+                </span>
               </div>
             </div>
           </div>
         </div>
       </div>
+
+      <!-- Vehicle Type Restriction Banner (if incompatible) -->
+      ${restrictionBannerHtml}
 
       <!-- 3-Star Mission Objectives & Rewards -->
       <div class="carx-objectives-box">
@@ -1246,15 +1426,43 @@ class RacingApp {
       <!-- Big CarX Glowing CTA Button -->
       <button class="btn-carx-drive" id="btnCarxDrive">
         <div class="drive-btn-inner">
-          <span class="drive-btn-icon">🏎️</span>
+          <span class="drive-btn-icon">${isF1Track ? '🏁' : '🏎️'}</span>
           <div style="text-align: left;">
-            <div class="drive-btn-main">DRIVE HIGHWAY • START EVENT</div>
-            <div class="drive-btn-sub">FULL SPEED TRAFFIC DUEL • ALL SYSTEMS ARMED</div>
+            <div class="drive-btn-main">${isF1Track ? 'ENTER MONZA GRAND PRIX' : 'DRIVE HIGHWAY • START EVENT'}</div>
+            <div class="drive-btn-sub">${isF1Track ? 'FORMULA 1 GRAND PRIX • 0 TRAFFIC • TEMPLE OF SPEED' : 'FULL SPEED TRAFFIC DUEL • ALL SYSTEMS ARMED'}</div>
           </div>
           <span class="drive-btn-chevron">➔</span>
         </div>
       </button>
     `;
+
+    // Hook up auto-switch button if present
+    const switchBtn = stage.querySelector('#btnResAutoSwitch');
+    if (switchBtn) {
+      switchBtn.addEventListener('click', async () => {
+        if (isF1Track) {
+          const f1Car = this.cars.find(c => c.slug === 'f1-2022-ferrari' && c.is_unlocked) ||
+                        this.cars.find(c => (c.category === 'Formula 1' || c.slug.startsWith('f1-') || c.slug === 'mclaren-mp45') && c.is_unlocked) ||
+                        this.cars.find(c => c.slug === 'f1-2022-ferrari') ||
+                        this.cars.find(c => c.category === 'Formula 1');
+          if (f1Car) {
+            this.cars.forEach(c => c.is_selected = (c.slug === f1Car.slug));
+            try { await RacingAPI.selectCar(f1Car.slug); } catch (e) {}
+            this.renderHighwayMissionDetail(track.slug);
+          }
+        } else {
+          const streetCar = this.cars.find(c => c.slug === 'nissan-gtr-nismo' && c.is_unlocked) ||
+                            this.cars.find(c => c.category !== 'Formula 1' && !c.slug.startsWith('f1-') && c.slug !== 'mclaren-mp45' && c.is_unlocked) ||
+                            this.cars.find(c => c.slug === 'nissan-gtr-nismo') ||
+                            this.cars.find(c => c.category !== 'Formula 1');
+          if (streetCar) {
+            this.cars.forEach(c => c.is_selected = (c.slug === streetCar.slug));
+            try { await RacingAPI.selectCar(streetCar.slug); } catch (e) {}
+            this.renderHighwayMissionDetail(track.slug);
+          }
+        }
+      });
+    }
 
     // Time-of-day click handler
     stage.querySelectorAll('.carx-time-pill').forEach(pill => {
@@ -1406,15 +1614,51 @@ class RacingApp {
     this.navigateTo('game');
 
     // Attempt orientation lock to landscape on mobile devices
-    if (screen.orientation && screen.orientation.lock) {
-      screen.orientation.lock('landscape').catch(() => {});
-    }
+    this.requestLandscapeOrientation();
 
     // Find currently equipped car or fallback to selected in garage
-    const activeCar = this.cars.find(c => c.is_selected) || this.cars[this.selectedCarIndex] || this.cars[0];
+    let activeCar = this.cars.find(c => c.is_selected) || this.cars[this.selectedCarIndex] || this.cars[0];
 
-    // Pick 3 diverse real-life AI rivals
-    const otherCars = this.cars.filter(c => c.slug !== activeCar.slug);
+    const isF1Track = (this.selectedTrackSlug === 'monza-f1' || this.selectedTrackSlug === 'autodromo-monza' || (this.tracks && this.tracks.find(t => t.slug === this.selectedTrackSlug)?.isF1Track));
+    let isF1Car = activeCar.category === 'Formula 1' || activeCar.slug.startsWith('f1-') || activeCar.slug === 'mclaren-mp45';
+
+    // Strict two-way vehicle restriction:
+    // 1. F1 track ONLY allows Formula 1 cars
+    // 2. Public highway tracks ONLY allow Supercars / GT / Sports cars
+    if (isF1Track && !isF1Car) {
+      const f1Car = this.cars.find(c => c.slug === 'f1-2022-ferrari' && c.is_unlocked) ||
+                    this.cars.find(c => (c.category === 'Formula 1' || c.slug.startsWith('f1-') || c.slug === 'mclaren-mp45') && c.is_unlocked) ||
+                    this.cars.find(c => c.slug === 'f1-2022-ferrari') ||
+                    this.cars.find(c => c.category === 'Formula 1');
+      if (f1Car) {
+        this.cars.forEach(c => c.is_selected = (c.slug === f1Car.slug));
+        activeCar = f1Car;
+        isF1Car = true;
+        try { RacingAPI.selectCar(f1Car.slug); } catch (e) {}
+      }
+    } else if (!isF1Track && isF1Car) {
+      const streetCar = this.cars.find(c => c.slug === 'nissan-gtr-nismo' && c.is_unlocked) ||
+                        this.cars.find(c => c.category !== 'Formula 1' && !c.slug.startsWith('f1-') && c.slug !== 'mclaren-mp45' && c.is_unlocked) ||
+                        this.cars.find(c => c.slug === 'nissan-gtr-nismo') ||
+                        this.cars.find(c => c.category !== 'Formula 1');
+      if (streetCar) {
+        this.cars.forEach(c => c.is_selected = (c.slug === streetCar.slug));
+        activeCar = streetCar;
+        isF1Car = false;
+        try { RacingAPI.selectCar(streetCar.slug); } catch (e) {}
+      }
+    }
+
+    // Pick 3 diverse real-life AI rivals (use F1 rivals if F1 car or F1 track)
+    let otherCars;
+    if (isF1Car || isF1Track) {
+      const f1Rivals = this.cars.filter(c => (c.category === 'Formula 1' || c.slug.startsWith('f1-') || c.slug === 'mclaren-mp45') && c.slug !== activeCar.slug);
+      otherCars = f1Rivals.length >= 3 ? f1Rivals : this.cars.filter(c => c.slug !== activeCar.slug);
+    } else {
+      otherCars = this.cars.filter(c => c.category !== 'Formula 1' && !c.slug.startsWith('f1-') && c.slug !== 'mclaren-mp45' && c.slug !== activeCar.slug);
+      if (otherCars.length < 3) otherCars = this.cars.filter(c => c.slug !== activeCar.slug);
+    }
+
     const aiConfigs = otherCars.slice(0, 3).map(c => ({
       slug: c.slug,
       name: c.name,
@@ -1425,7 +1669,8 @@ class RacingApp {
       weight_kg: c.weight_kg,
       handling_score: c.handling_score,
       braking_score: c.braking_score,
-      audio_pitch: c.audio_pitch
+      audio_pitch: c.audio_pitch,
+      category: c.category
     }));
 
     // Stop old engine if running
@@ -1436,11 +1681,12 @@ class RacingApp {
     // Launch 3D Three.js Engine
     this.gameEngine = new RacingGameEngine3D('game3DContainer');
 
-    const selectedTime = this.trackTimePrefs[this.selectedTrackSlug] || 'night';
+    const selectedTime = this.trackTimePrefs[this.selectedTrackSlug] || 'day';
 
     this.gameEngine.setupRace(this.selectedTrackSlug, {
       slug: activeCar.slug,
       name: activeCar.name,
+      category: activeCar.category,
       color: activeCar.custom_color || activeCar.default_color,
       top_speed_mph: activeCar.top_speed_mph,
       horsepower: activeCar.horsepower,
@@ -1702,4 +1948,5 @@ class RacingApp {
 // Instantiate App when DOM is loaded
 window.addEventListener('DOMContentLoaded', () => {
   window.racingApp = new RacingApp();
+  window.app = window.racingApp;
 });

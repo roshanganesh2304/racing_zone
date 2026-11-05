@@ -219,7 +219,9 @@ class World3D {
     this.buildRoadNetwork(trackDef, biome);
 
     // 3. Iconic GTA City Landmarks & Biome Scenery
-    if (biome === 'vice_city' || trackDef.slug === 'vice-city') {
+    if (biome === 'monza_f1' || trackDef.slug === 'monza-f1') {
+      this.buildMonzaScenery(trackDef, selectedTime);
+    } else if (biome === 'vice_city' || trackDef.slug === 'vice-city') {
       this.buildViceCityScenery(trackDef, selectedTime);
     } else if (biome === 'liberty_city' || trackDef.slug === 'liberty-city') {
       this.buildLibertyCityScenery(trackDef, selectedTime);
@@ -242,7 +244,10 @@ class World3D {
     let terrainColor = trackDef.terrainColor || 0x18201a;
     let roughness = 0.9;
 
-    if (biome === 'vice_city') {
+    if (biome === 'monza_f1') {
+      terrainColor = 0x16341c; // Royal Monza park lush grass
+      roughness = 0.88;
+    } else if (biome === 'vice_city') {
       terrainColor = 0x0f2b46; // Ocean turquoise
       roughness = 0.3;
     } else if (biome === 'blaine_county') {
@@ -266,40 +271,76 @@ class World3D {
     this.environmentGroup.add(terrain);
   }
 
+  createTrackRibbonGeometry(curve, segments = 320, halfWidth = 18, heightY = 0.035) {
+    const geo = new THREE.BufferGeometry();
+    const positions = [];
+    const normals = [];
+    const uvs = [];
+    const indices = [];
+
+    for (let i = 0; i <= segments; i++) {
+      const t = (i / segments) % 1.0;
+      const pt = curve.getPointAt(t);
+      const tangent = curve.getTangentAt(t);
+
+      // In XZ plane, 2D perpendicular normal to (tangent.x, tangent.z) is (-tangent.z, tangent.x)
+      let nx = -tangent.z;
+      let nz = tangent.x;
+      const len = Math.hypot(nx, nz) || 1;
+      nx /= len;
+      nz /= len;
+
+      // Left vertex
+      positions.push(pt.x + nx * halfWidth, heightY, pt.z + nz * halfWidth);
+      normals.push(0, 1, 0);
+      uvs.push(0, (i / segments) * 60);
+
+      // Right vertex
+      positions.push(pt.x - nx * halfWidth, heightY, pt.z - nz * halfWidth);
+      normals.push(0, 1, 0);
+      uvs.push(1, (i / segments) * 60);
+
+      if (i < segments) {
+        const v0 = i * 2;
+        const v1 = i * 2 + 1;
+        const v2 = (i + 1) * 2;
+        const v3 = (i + 1) * 2 + 1;
+
+        // Front-facing quad with upward normal (0, 1, 0)
+        indices.push(v0, v1, v2);
+        indices.push(v1, v3, v2);
+      }
+    }
+
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+    geo.setIndex(indices);
+    return geo;
+  }
+
   buildRoadNetwork(trackDef, biome) {
     const wps = trackDef.waypoints;
-    const roadW = trackDef.roadWidth || 36; // 36m wide authentic multi-lane highway
+    const roadW = trackDef.isF1Track ? (trackDef.roadWidth || 32) : Math.max(36, trackDef.roadWidth || 36);
 
     const points = wps.map(p => new THREE.Vector3(p.x, 0.05, (p.z !== undefined ? p.z : p.y)));
     const curve = this.trackCurve || new THREE.CatmullRomCurve3(points, true);
     this.trackCurve = curve;
 
-    // 1. High-Grade Interstate Asphalt
+    // 1. High-Grade Interstate Asphalt (Pristine, non-intersecting upward ribbon geometry)
     const roadMat = new THREE.MeshStandardMaterial({
       color: trackDef.surfaceColor || 0x181c24,
       roughness: 0.82,
       metalness: 0.18
     });
 
-    const roadGeo = new THREE.TubeGeometry(curve, 260, roadW / 2, 8, true);
-    const pos = roadGeo.attributes.position;
-    for (let i = 0; i < pos.count; i++) {
-      pos.setY(i, 0.035);
-    }
-    roadGeo.computeVertexNormals();
-
+    const roadGeo = this.createTrackRibbonGeometry(curve, 320, roadW / 2, 0.035);
     const roadMesh = new THREE.Mesh(roadGeo, roadMat);
     roadMesh.receiveShadow = true;
     this.environmentGroup.add(roadMesh);
 
     // 2. Concrete Shoulder Curbs / Outer Barriers
-    const curbGeo = new THREE.TubeGeometry(curve, 260, roadW / 2 + 1.2, 8, true);
-    const cpos = curbGeo.attributes.position;
-    for (let i = 0; i < cpos.count; i++) {
-      cpos.setY(i, 0.025);
-    }
-    curbGeo.computeVertexNormals();
-
+    const curbGeo = this.createTrackRibbonGeometry(curve, 320, roadW / 2 + 1.2, 0.025);
     const curbMat = new THREE.MeshStandardMaterial({
       color: 0x4a505c, // Concrete grey shoulder
       roughness: 0.9
@@ -307,14 +348,14 @@ class World3D {
     const curbMesh = new THREE.Mesh(curbGeo, curbMat);
     this.environmentGroup.add(curbMesh);
 
-    // 3. Multi-Lane Striping: Dashed White Lane Lines & Solid Yellow Shoulders
-    this.buildHighwayLaneStripes(curve, roadW);
-
-    // 4. Overhead Interstate Highway Gantry Signs (Spanning the Road)
-    this.buildOverheadHighwayGantries(trackDef, points, curve, roadW);
-
-    // 5. Elevated Concrete Highway Overpass Bridges
-    this.buildHighwayOverpassBridges(points, curve, roadW);
+    // 3. Road Markings & Infrastructure
+    if (!trackDef.isF1Track) {
+      this.buildHighwayLaneStripes(curve, roadW);
+      this.buildOverheadHighwayGantries(trackDef, points, curve, roadW);
+      this.buildHighwayOverpassBridges(points, curve, roadW);
+    } else {
+      this.buildF1CircuitTrackMarkings(trackDef, curve, points, roadW);
+    }
 
     // 6. Start / Finish Line Checkered Bar in 3D
     const sf1 = points[0];
@@ -496,6 +537,93 @@ class World3D {
     return new THREE.CanvasTexture(canvas);
   }
 
+  createSignTexture(config) {
+    const canvas = document.createElement('canvas');
+    canvas.width = config.width || 512;
+    canvas.height = config.height || 256;
+    const ctx = canvas.getContext('2d');
+
+    // Background
+    ctx.fillStyle = config.bgColor || '#0b111e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Glowing border
+    if (config.borderColor) {
+      ctx.strokeStyle = config.borderColor;
+      ctx.lineWidth = config.borderWidth || 8;
+      ctx.strokeRect(6, 6, canvas.width - 12, canvas.height - 12);
+    }
+
+    // Top Header or Badge
+    if (config.badge) {
+      ctx.fillStyle = config.badgeColor || '#ffd600';
+      ctx.font = 'bold 22px Arial, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(config.badge, canvas.width / 2, 42);
+    }
+
+    // Main Title
+    ctx.fillStyle = config.textColor || '#ffffff';
+    ctx.font = config.font || '900 48px "Arial Black", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    if (config.shadowColor) {
+      ctx.shadowColor = config.shadowColor;
+      ctx.shadowBlur = config.shadowBlur || 15;
+    }
+    const titleY = config.subtitle ? (config.badge ? 120 : 110) : canvas.height / 2 + 16;
+    ctx.fillText(config.text, canvas.width / 2, titleY);
+
+    // Subtitle
+    if (config.subtitle) {
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = config.subColor || '#ffd600';
+      ctx.font = config.subFont || 'bold 24px Arial, sans-serif';
+      ctx.fillText(config.subtitle, canvas.width / 2, titleY + 44);
+    }
+
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  createRoute68DecalTexture() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+
+    ctx.clearRect(0, 0, 256, 256);
+
+    // US Route Shield Outer Contour
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(128, 20);
+    ctx.quadraticCurveTo(220, 20, 220, 110);
+    ctx.quadraticCurveTo(220, 200, 128, 240);
+    ctx.quadraticCurveTo(36, 200, 36, 110);
+    ctx.quadraticCurveTo(36, 20, 128, 20);
+    ctx.fill();
+
+    // Dark Inner Cutout
+    ctx.fillStyle = '#1c202a';
+    ctx.beginPath();
+    ctx.moveTo(128, 32);
+    ctx.quadraticCurveTo(208, 32, 208, 110);
+    ctx.quadraticCurveTo(208, 192, 128, 228);
+    ctx.quadraticCurveTo(48, 192, 48, 110);
+    ctx.quadraticCurveTo(48, 32, 128, 32);
+    ctx.fill();
+
+    // Stencil Text
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'center';
+    ctx.font = '900 32px "Arial Black", Arial, sans-serif';
+    ctx.fillText('ROUTE', 128, 80);
+
+    ctx.font = '900 90px "Arial Black", Arial, sans-serif';
+    ctx.fillText('68', 128, 180);
+
+    return new THREE.CanvasTexture(canvas);
+  }
+
   buildHighwayOverpassBridges(points, curve, roadW) {
     if (points.length < 5) return;
     const bridgeMat = new THREE.MeshStandardMaterial({ color: 0x828894, roughness: 0.9, metalness: 0.1 });
@@ -516,8 +644,8 @@ class World3D {
       bridgeGroup.position.set((p1.x + p2.x) / 2, 0, (p1.z + p2.z) / 2);
       bridgeGroup.rotation.y = angle + Math.PI / 2;
 
-      const bridgeLen = roadW + 36;
-      const bridgeHeight = 9.2;
+      const bridgeLen = roadW + 64;
+      const bridgeHeight = 11.5;
 
       // Concrete Deck Slab
       const deck = new THREE.Mesh(new THREE.BoxGeometry(bridgeLen, 1.8, 16), bridgeMat);
@@ -526,13 +654,13 @@ class World3D {
       deck.receiveShadow = true;
       bridgeGroup.add(deck);
 
-      // Support Piers outside Shoulders (7m clearance from road edge)
-      const pier1 = new THREE.Mesh(new THREE.BoxGeometry(2.4, bridgeHeight - 0.9, 4.0), bridgeMat);
-      pier1.position.set(-roadW / 2 - 7.0, (bridgeHeight - 0.9) / 2, 0);
+      // Support Abutment Piers far outside Shoulders (24m clearance from road edge!)
+      const pier1 = new THREE.Mesh(new THREE.BoxGeometry(3.0, bridgeHeight - 0.9, 5.0), bridgeMat);
+      pier1.position.set(-roadW / 2 - 24.0, (bridgeHeight - 0.9) / 2, 0);
       bridgeGroup.add(pier1);
 
-      const pier2 = new THREE.Mesh(new THREE.BoxGeometry(2.4, bridgeHeight - 0.9, 4.0), bridgeMat);
-      pier2.position.set(roadW / 2 + 7.0, (bridgeHeight - 0.9) / 2, 0);
+      const pier2 = new THREE.Mesh(new THREE.BoxGeometry(3.0, bridgeHeight - 0.9, 5.0), bridgeMat);
+      pier2.position.set(roadW / 2 + 24.0, (bridgeHeight - 0.9) / 2, 0);
       bridgeGroup.add(pier2);
 
       // Side Safety Parapets / Railings
@@ -589,15 +717,17 @@ class World3D {
       const bx = Math.cos(angle) * rad + (Math.random() - 0.5) * 50;
       const bz = Math.sin(angle) * rad + (Math.random() - 0.5) * 50;
 
+      const bw = 28 + Math.random() * 32;
+      const bd = 28 + Math.random() * 32;
+      const bh = 55 + Math.random() * 125;
+      const bRadius = Math.hypot(bw / 2, bd / 2);
+      const reqDist = (trackDef.roadWidth || 28) / 2 + bRadius + 30;
+
       // Skip areas reserved for landmarks
       if (Math.hypot(bx - 160, bz - (-180)) < 70) continue;
       if (Math.hypot(bx - (-290), bz - (-360)) < 90) continue;
       if (Math.hypot(bx - 485, bz - 30) < 100) continue;
-      if (this.isNearTrack(bx, bz, trackDef, 75)) continue;
-
-      const bw = 28 + Math.random() * 32;
-      const bd = 28 + Math.random() * 32;
-      const bh = 55 + Math.random() * 125;
+      if (this.isNearTrack(bx, bz, trackDef, reqDist)) continue;
 
       const bMesh = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), i % 2 === 0 ? towerMatDark : towerMatGlass);
       bMesh.position.set(bx, bh / 2, bz);
@@ -606,7 +736,7 @@ class World3D {
       this.environmentGroup.add(bMesh);
 
       // Register building collider for collision pushback (strictly outside track buffer)
-      this.buildingColliders.push({ x: bx, z: bz, radius: Math.max(bw, bd) * 0.5 });
+      this.buildingColliders.push({ x: bx, z: bz, radius: bRadius });
 
       // Rooftop aircraft warning red beacons
       if (bh > 90) {
@@ -846,33 +976,62 @@ class World3D {
   /* --------------------------------------------------------------------------
      GTA CITY 2: VICE CITY (Miami)
      Landmarks: Ocean Drive Art Deco Neon Strip, Marina Speedboats, Pink Palms
+     Matches Real Image: Ocean View Hotel, Cafe Cabana, Palm Court, Beach & Ocean
      -------------------------------------------------------------------------- */
   buildViceCityScenery(trackDef, timeOfDay) {
     const isNight = (timeOfDay === 'night');
     const isSunset = (timeOfDay === 'sunset');
 
-    // 1. Ocean Drive Pastel Art Deco Hotel Row
+    // 0. Coastal Beach & Ocean Strip (matching Image 2)
+    const sandGeo = new THREE.PlaneGeometry(1600, 360);
+    const sandMat = new THREE.MeshStandardMaterial({ color: 0xdec096, roughness: 0.95 });
+    const sand = new THREE.Mesh(sandGeo, sandMat);
+    sand.rotation.x = -Math.PI / 2;
+    sand.position.set(0, 0.02, 380);
+    this.environmentGroup.add(sand);
+
+    const seaGeo = new THREE.PlaneGeometry(2400, 800);
+    const seaMat = new THREE.MeshStandardMaterial({
+      color: 0x0096c7,
+      roughness: 0.15,
+      metalness: 0.2,
+      transparent: true,
+      opacity: 0.88
+    });
+    const ocean = new THREE.Mesh(seaGeo, seaMat);
+    ocean.rotation.x = -Math.PI / 2;
+    ocean.position.set(0, 0.01, 940);
+    this.environmentGroup.add(ocean);
+
+    // 1. Signature Art Deco Hotels from Real Image 2
+    this.buildArtDecoSignHotel(-140, 130, 'OCEAN VIEW HOTEL', 0xc5dff8, '#00f0ff', 'OCEAN DRIVE • ART DECO SUITES');
+    this.buildArtDecoSignHotel(0, 130, 'CAFE CABANA', 0xffd6a5, '#ff6b35', 'AUTHENTIC CUBAN CUISINE & COCKTAILS');
+    this.buildArtDecoSignHotel(140, 130, 'PALM COURT', 0xa0c4ff, '#00f0ff', 'HISTORIC LUXURY HOTEL');
+
+    // 2. Background Pastel Art Deco Hotel Row
     const hotelPastels = [0xffcbf2, 0xa0c4ff, 0xfde2e4, 0xcaffbf, 0xffd6a5];
     const neonPink = new THREE.MeshBasicMaterial({ color: 0xff007f });
     const neonCyan = new THREE.MeshBasicMaterial({ color: 0x00f0ff });
     const neonGold = new THREE.MeshBasicMaterial({ color: 0xffd600 });
 
-    const hotelNames = ['OCEAN DRIVE', 'MALIBU CLUB', 'CORAL PALACE', 'VICE POINT', 'COLONY HOTEL', 'TROPICANA'];
-
-    for (let i = 0; i < 28; i++) {
-      const angle = (i / 28) * Math.PI * 2;
-      const rad = 230 + (i % 3) * 80;
+    for (let i = 0; i < 26; i++) {
+      const angle = (i / 26) * Math.PI * 2;
+      const rad = 240 + (i % 3) * 75;
       const hx = Math.cos(angle) * rad;
       const hz = Math.sin(angle) * rad;
-      if (this.isNearTrack(hx, hz, trackDef, 70)) continue;
+      const hw = 26 + Math.random() * 12;
+      const hh = 22 + Math.random() * 26;
+      const hd = 22 + Math.random() * 10;
+      const hRadius = Math.hypot(hw / 2, hd / 2);
+      const reqDist = (trackDef.roadWidth || 26) / 2 + hRadius + 30;
+
+      // Skip spots reserved for signature hotels & ocean
+      if (hz > 110 && Math.abs(hx) < 220) continue;
+      if (this.isNearTrack(hx, hz, trackDef, reqDist)) continue;
 
       const hotel = new THREE.Group();
       hotel.position.set(hx, 0, hz);
       hotel.rotation.y = -angle + Math.PI / 2;
-
-      const hw = 26 + Math.random() * 12;
-      const hh = 22 + Math.random() * 26;
-      const hd = 22 + Math.random() * 10;
       const pColor = hotelPastels[i % hotelPastels.length];
 
       // Pastel Facade
@@ -881,7 +1040,7 @@ class World3D {
       body.position.y = hh / 2;
       hotel.add(body);
 
-      this.buildingColliders.push({ x: hx, z: hz, radius: Math.max(hw, hd) * 0.5 });
+      this.buildingColliders.push({ x: hx, z: hz, radius: hRadius });
 
       // Curved Art Deco Eyebrow Overhang
       const browMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
@@ -897,22 +1056,17 @@ class World3D {
         const trim2 = new THREE.Mesh(new THREE.BoxGeometry(hw + 0.4, 0.4, 0.4), neonGold);
         trim2.position.set(0, hh * 0.75, hd / 2 + 0.3);
         hotel.add(trim1, trim2);
-
-        // Glowing Neon Hotel Signboard
-        const sign = new THREE.Mesh(new THREE.BoxGeometry(hw * 0.65, 3.8, 0.6), (i % 2 === 0 ? neonCyan : neonPink));
-        sign.position.set(0, hh + 2.2, 0);
-        hotel.add(sign);
       }
 
       this.environmentGroup.add(hotel);
     }
 
-    // 2. Marina Docked Speedboats & Luxury Yachts
+    // 3. Marina Docked Speedboats & Luxury Yachts
     const boatHullMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
     const boatGlassMat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, roughness: 0.1 });
     for (let b = 0; b < 10; b++) {
       const boat = new THREE.Group();
-      boat.position.set(-320 + b * 75, 0, 340 + (b % 2) * 45);
+      boat.position.set(-320 + b * 75, 0, 360 + (b % 2) * 45);
 
       const hull = new THREE.Mesh(new THREE.BoxGeometry(9, 3.5, 24), boatHullMat);
       hull.position.y = 1.0;
@@ -925,16 +1079,64 @@ class World3D {
       this.environmentGroup.add(boat);
     }
 
-    // 3. Miami Royal Palm Trees with Pink/Cyan Uplights
+    // 4. Miami Royal Palm Trees with Pink/Cyan Uplights
     this.placePalmTrees(trackDef, 90, true);
 
-    // 4. Streetlights
+    // 5. Streetlights
     this.placeStreetlightsAlongCircuit(trackDef, 0xff007f, true);
+  }
+
+  buildArtDecoSignHotel(x, z, name, pColor, neonColor, subtitle = 'OCEAN DRIVE') {
+    const hotel = new THREE.Group();
+    hotel.position.set(x, 0, z);
+    const hw = 36, hh = 28, hd = 24;
+
+    const bodyMat = new THREE.MeshStandardMaterial({ color: pColor, roughness: 0.5 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(hw, hh, hd), bodyMat);
+    body.position.y = hh / 2;
+    hotel.add(body);
+
+    // Eyebrows
+    const browMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+    const eyebrow = new THREE.Mesh(new THREE.BoxGeometry(hw + 4, 1.4, 6), browMat);
+    eyebrow.position.set(0, 5, hd / 2 + 2);
+    hotel.add(eyebrow);
+
+    // Stepped Art Deco rooftop crown
+    const crownMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+    const crown = new THREE.Mesh(new THREE.BoxGeometry(18, 7, hd - 4), crownMat);
+    crown.position.set(0, hh + 3.5, 0);
+    hotel.add(crown);
+
+    // Neon Marquee Canvas Sign
+    const signTex = this.createSignTexture({
+      width: 512,
+      height: 192,
+      bgColor: '#0f1422',
+      borderColor: neonColor,
+      borderWidth: 6,
+      text: name,
+      textColor: neonColor,
+      font: '900 40px "Arial Black", Arial, sans-serif',
+      shadowColor: neonColor,
+      shadowBlur: 18,
+      subtitle: subtitle,
+      subColor: '#ffffff',
+      subFont: 'bold 20px Arial, sans-serif'
+    });
+    const signMat = new THREE.MeshBasicMaterial({ map: signTex });
+    const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(20, 7.5), signMat);
+    signMesh.position.set(0, hh + 5.5, hd / 2 + 0.6);
+    hotel.add(signMesh);
+
+    this.environmentGroup.add(hotel);
+    this.buildingColliders.push({ x: x, z: z, radius: 24 });
   }
 
   /* --------------------------------------------------------------------------
      GTA CITY 3: LIBERTY CITY (New York)
      Landmarks: Star Junction (Times Square) Giant Billboards, Rotterdam Spire
+     Matches Real Image: Coke, iFruit, Sprunk, LC Herald, Burger Shot, Love Fist
      -------------------------------------------------------------------------- */
   buildLibertyCityScenery(trackDef, timeOfDay) {
     const isNight = (timeOfDay === 'night');
@@ -942,48 +1144,131 @@ class World3D {
     const limestoneMat = new THREE.MeshStandardMaterial({ color: 0x9e9a93, roughness: 0.4 });
     const darkGlass = new THREE.MeshStandardMaterial({ color: 0x111622, roughness: 0.2, metalness: 0.8 });
 
-    // 1. Rotterdam Tower (Empire State Spire)
-    this.buildRotterdamTower(-140, 0, -180);
+    // 1. Rotterdam Tower (Empire State Spire) - safely centered in skyline plaza, 190m clear of track
+    this.buildRotterdamTower(-80, 0, 0);
 
     // 2. Broker Bridge Overhead Suspension Towers
     this.buildSuspensionBridgeArch(0, 0, 250, trackDef.roadWidth || 28);
 
-    // 3. Star Junction Giant Video Billboards & Manhattan Towers
-    const billboardColors = [0xff0055, 0x00f0ff, 0xffd600, 0x00f59b, 0xff7b00];
+    // 3. Signature Star Junction Video Billboards matching Image 3
+    const realBillboards = [
+      { text: 'LC HERALD', sub: 'DAILY NEWSPAPER • SINCE 1898', bg: '#081220', textCol: '#ffffff', border: '#00f0ff' },
+      { text: 'COKE', sub: 'OPEN HAPPINESS', bg: '#cc0011', textCol: '#ffffff', border: '#ffffff' },
+      { text: 'iFRUIT', sub: 'SMARTPHONE 14 PRO', bg: '#0d0d0d', textCol: '#ffffff', border: '#00f0ff' },
+      { text: 'SPRUNK', sub: 'THE ESSENCE OF LIFE', bg: '#008822', textCol: '#ffffff', border: '#ffd600' },
+      { text: 'BURGER SHOT', sub: 'HIT ME WITH YOUR BEST SHOT', bg: '#b31e00', textCol: '#ffd600', border: '#ffd600' },
+      { text: 'LOVE FIST', sub: 'WORLD TOUR LIVE IN CONCERT', bg: '#2b0938', textCol: '#f72585', border: '#f72585' },
+      { text: 'THE MENACE', sub: 'BROADWAY SMASH HIT MUSICAL', bg: '#160824', textCol: '#ffd600', border: '#ff0055' }
+    ];
+
     for (let i = 0; i < 44; i++) {
       const angle = (i / 44) * Math.PI * 2;
-      const rad = 240 + (i % 4) * 85;
+      const rad = 250 + (i % 4) * 85;
       const bx = Math.cos(angle) * rad;
       const bz = Math.sin(angle) * rad;
-
-      if (Math.hypot(bx - (-140), bz - (-180)) < 70) continue;
-      if (this.isNearTrack(bx, bz, trackDef, 75)) continue;
 
       const bw = 28 + Math.random() * 28;
       const bd = 28 + Math.random() * 28;
       const bh = 65 + Math.random() * 135;
+      const bRadius = Math.hypot(bw / 2, bd / 2);
+      const reqDist = (trackDef.roadWidth || 27) / 2 + bRadius + 30;
+
+      if (Math.hypot(bx - (-80), bz - 0) < 80) continue;
+      if (this.isNearTrack(bx, bz, trackDef, reqDist)) continue;
 
       const bMesh = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), i % 3 === 0 ? brickMat : (i % 3 === 1 ? limestoneMat : darkGlass));
       bMesh.position.set(bx, bh / 2, bz);
       bMesh.castShadow = (i < 8);
       bMesh.receiveShadow = true;
       this.environmentGroup.add(bMesh);
-      this.buildingColliders.push({ x: bx, z: bz, radius: Math.max(bw, bd) * 0.5 });
+      this.buildingColliders.push({ x: bx, z: bz, radius: bRadius });
 
-      // Towering Times Square Billboards
+      // Times Square Illuminated Electronic Video Billboards
       if (bh > 70) {
-        const numBoards = Math.min(3, Math.floor(bh / 35));
-        for (let b = 1; b <= numBoards; b++) {
-          const bColor = billboardColors[(i + b) % billboardColors.length];
-          const ad = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.8, 14, 0.7), new THREE.MeshBasicMaterial({ color: bColor }));
-          ad.position.set(bx, b * 26, bz + bd / 2 + 0.45);
-          this.environmentGroup.add(ad);
-        }
+        const adConfig = realBillboards[i % realBillboards.length];
+        const adTex = this.createSignTexture({
+          width: 512,
+          height: 256,
+          bgColor: adConfig.bg,
+          borderColor: adConfig.border,
+          borderWidth: 8,
+          text: adConfig.text,
+          textColor: adConfig.textCol,
+          font: '900 46px "Arial Black", Arial, sans-serif',
+          shadowColor: adConfig.border,
+          shadowBlur: 16,
+          subtitle: adConfig.sub,
+          subColor: '#ffd600',
+          subFont: 'bold 22px Arial, sans-serif'
+        });
+        const adMat = new THREE.MeshBasicMaterial({ map: adTex });
+        const adMesh = new THREE.Mesh(new THREE.PlaneGeometry(bw * 0.82, 16), adMat);
+        adMesh.position.set(bx, 32, bz + bd / 2 + 0.55);
+        this.environmentGroup.add(adMesh);
       }
     }
 
+    // 4. Street-Level Subway Entrance & Yellow Cabs (matching Image 3)
+    this.buildNycSubwayEntrance(25, 0, 245);
+    this.buildYellowCabs(trackDef);
+
     // Streetlights
     this.placeStreetlightsAlongCircuit(trackDef, 0xffd166, isNight);
+  }
+
+  buildNycSubwayEntrance(x, y, z) {
+    const subGroup = new THREE.Group();
+    subGroup.position.set(x, y, z);
+
+    // Green iron railing
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x194d33, roughness: 0.7, metalness: 0.5 });
+    const railing = new THREE.Mesh(new THREE.BoxGeometry(6, 1.4, 10), railMat);
+    railing.position.y = 0.7;
+    subGroup.add(railing);
+
+    // Dark stairs cavity
+    const holeMat = new THREE.MeshBasicMaterial({ color: 0x050505 });
+    const stairs = new THREE.Mesh(new THREE.PlaneGeometry(5, 9), holeMat);
+    stairs.rotation.x = -Math.PI / 2;
+    stairs.position.y = 0.05;
+    subGroup.add(stairs);
+
+    // Glowing Green Subway Globes
+    const globeMat = new THREE.MeshBasicMaterial({ color: 0x00f59b });
+    const postMat = new THREE.MeshStandardMaterial({ color: 0x194d33 });
+    for (let gx of [-2.8, 2.8]) {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 3.2), postMat);
+      post.position.set(gx, 1.6, 4.8);
+      const globe = new THREE.Mesh(new THREE.SphereGeometry(0.4, 8, 8), globeMat);
+      globe.position.set(gx, 3.4, 4.8);
+      subGroup.add(post, globe);
+    }
+
+    this.environmentGroup.add(subGroup);
+  }
+
+  buildYellowCabs(trackDef) {
+    const cabMat = new THREE.MeshStandardMaterial({ color: 0xffb703, roughness: 0.25, metalness: 0.4 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x111622, roughness: 0.1 });
+    const taxiSignMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    const wps = trackDef.waypoints;
+    const cabSpots = [1, 3, 5, 7].filter(i => i < wps.length);
+    cabSpots.forEach(idx => {
+      const p = wps[idx];
+      const cab = new THREE.Group();
+      cab.position.set(p.x + (idx % 2 === 0 ? 18 : -18), 0, p.z + 10);
+
+      const body = new THREE.Mesh(new THREE.BoxGeometry(2.3, 1.2, 5.0), cabMat);
+      body.position.y = 0.65;
+      const cabin = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.9, 2.8), glassMat);
+      cabin.position.set(0, 1.4, -0.2);
+      const sign = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.35, 1.4), taxiSignMat);
+      sign.position.set(0, 1.95, -0.2);
+
+      cab.add(body, cabin, sign);
+      this.environmentGroup.add(cab);
+    });
   }
 
   buildRotterdamTower(x, y, z) {
@@ -1022,9 +1307,9 @@ class World3D {
     const stoneMat = new THREE.MeshStandardMaterial({ color: 0x6c6b68, roughness: 0.7 });
     const cableMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8 });
 
-    // Twin Gothic Arch Towers placed outside the road shoulders (road runs along X, span is along Z)
+    // Twin Gothic Arch Towers placed outside the road shoulders (20m clearance from road edge!)
     const towerH = 52;
-    const clearWidth = roadW + 14; // 14m wider than roadway
+    const clearWidth = roadW + 40; // 40m wider than roadway
     const postL = new THREE.Mesh(new THREE.BoxGeometry(6.5, towerH, 5.5), stoneMat);
     postL.position.set(0, towerH / 2, -clearWidth / 2);
     const postR = new THREE.Mesh(new THREE.BoxGeometry(6.5, towerH, 5.5), stoneMat);
@@ -1049,42 +1334,56 @@ class World3D {
 
   /* --------------------------------------------------------------------------
      GTA CITY 4: LAS VENTURAS (Las Vegas)
-     Landmarks: The Camelot Obsidian Pyramid & Sky Beam, Casino Marquees, Dice
+     Landmarks: Caligula's Palace, The Pharaoh Pyramid & Sphinx, The Four Dragons, Starfish
+     Matches Real Image: Classical Colonnade, Golden Sphinx, Pagoda Dragon, Starfish Neon
      -------------------------------------------------------------------------- */
   buildLasVenturasScenery(trackDef, timeOfDay) {
     const isNight = (timeOfDay === 'night');
 
-    // 1. The Camelot / Luxor Giant Obsidian Pyramid (85m wide) & Blinding Sky Beam!
+    // 1. The Pharaoh / Luxor Giant Obsidian Pyramid & Blinding Sky Beam
     this.buildCasinoPyramid(-160, 0, -100);
+    this.buildSphinxStatue(-160, 0, -45);
 
-    // 2. The Strip Casino Towers & Glowing Marquees
+    // 2. Caligula's Palace Roman Colonnade Casino (matching Image 4)
+    this.buildCaligulasPalace(160, 0, -100);
+
+    // 3. The Four Dragons Asian Pagoda Casino (matching Image 4)
+    this.buildFourDragonsCasino(-160, 0, 120);
+
+    // 4. Starfish Casino with Neon Starfish (matching Image 4)
+    this.buildStarfishCasino(160, 0, 120);
+
+    // 5. The Strip Casino Towers & Glowing Marquees
     const goldMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.2, metalness: 0.85 });
     const mirrorGlass = new THREE.MeshStandardMaterial({ color: 0x1f1f2e, roughness: 0.1, metalness: 0.95 });
     const casinoNeonCols = [0xffd600, 0x9d4edd, 0xff0055, 0x00f0ff];
 
-    const casinoNames = ["CALIGULA'S PALACE", "THE VISAGE", "FOUR DRAGONS", "CASINO ROYALE", "PIRATES COVE"];
-
-    for (let i = 0; i < 40; i++) {
-      const angle = (i / 40) * Math.PI * 2;
-      const rad = 240 + (i % 4) * 85;
+    for (let i = 0; i < 36; i++) {
+      const angle = (i / 36) * Math.PI * 2;
+      const rad = 250 + (i % 4) * 85;
       const bx = Math.cos(angle) * rad;
       const bz = Math.sin(angle) * rad;
-
-      if (Math.hypot(bx - (-160), bz - (-100)) < 85) continue;
-      if (this.isNearTrack(bx, bz, trackDef, 75)) continue;
 
       const bw = 32 + Math.random() * 26;
       const bd = 32 + Math.random() * 26;
       const bh = 60 + Math.random() * 110;
+      const bRadius = Math.hypot(bw / 2, bd / 2);
+      const reqDist = (trackDef.roadWidth || 28) / 2 + bRadius + 30;
+
+      if (Math.hypot(bx - (-160), bz - (-100)) < 90) continue;
+      if (Math.hypot(bx - 160, bz - (-100)) < 80) continue;
+      if (Math.hypot(bx - (-160), bz - 120) < 80) continue;
+      if (Math.hypot(bx - 160, bz - 120) < 80) continue;
+      if (this.isNearTrack(bx, bz, trackDef, reqDist)) continue;
 
       const tower = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), i % 2 === 0 ? goldMat : mirrorGlass);
       tower.position.set(bx, bh / 2, bz);
       tower.castShadow = (i < 8);
       tower.receiveShadow = true;
       this.environmentGroup.add(tower);
-      this.buildingColliders.push({ x: bx, z: bz, radius: Math.max(bw, bd) * 0.5 });
+      this.buildingColliders.push({ x: bx, z: bz, radius: bRadius });
 
-      // Huge Neon Casino Marquee Signs
+      // Neon Casino Marquee Signs
       if (isNight) {
         const nCol = casinoNeonCols[i % casinoNeonCols.length];
         const marquee = new THREE.Mesh(new THREE.BoxGeometry(bw * 0.8, 9, 0.8), new THREE.MeshBasicMaterial({ color: nCol }));
@@ -1093,14 +1392,164 @@ class World3D {
       }
     }
 
-    // 3. Giant 3D Rolling Dice Sculptures at Casino Entrances
-    this.buildGiantCasinoDice(60, 0, 200);
+    // 6. Giant 3D Rolling Dice Sculptures at Casino Entrances
+    this.buildGiantCasinoDice(60, 0, 160);
 
-    // 4. Palm trees lining the Strip
+    // 7. Palm trees lining the Strip
     this.placePalmTrees(trackDef, 75);
 
-    // 5. Golden Casino Streetlights
+    // 8. Golden Casino Streetlights
     this.placeStreetlightsAlongCircuit(trackDef, 0xffd600, true);
+  }
+
+  buildCaligulasPalace(x, y, z) {
+    const palace = new THREE.Group();
+    palace.position.set(x, y, z);
+
+    const marbleMat = new THREE.MeshStandardMaterial({ color: 0xedeae1, roughness: 0.35 });
+    const goldMat = new THREE.MeshStandardMaterial({ color: 0xd4af37, metalness: 0.8 });
+
+    // Main Hall
+    const hall = new THREE.Mesh(new THREE.BoxGeometry(45, 24, 30), marbleMat);
+    hall.position.y = 12;
+    palace.add(hall);
+
+    // Classical Roman Colonnade (6 pillars)
+    for (let c = -2.5; c <= 2.5; c += 1) {
+      const col = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 1.2, 22, 12), marbleMat);
+      col.position.set(c * 7.5, 11, 16);
+      palace.add(col);
+    }
+
+    // Triangular Pediment Roof
+    const pediment = new THREE.Mesh(new THREE.ConeGeometry(24, 8, 4), goldMat);
+    pediment.rotation.y = Math.PI / 4;
+    pediment.position.set(0, 26, 16);
+    palace.add(pediment);
+
+    // Neon Chariot Signboard
+    const signTex = this.createSignTexture({
+      width: 512,
+      height: 192,
+      bgColor: '#160808',
+      borderColor: '#ff0033',
+      borderWidth: 6,
+      text: "CALIGULA'S PALACE",
+      textColor: '#ffd600',
+      font: '900 36px "Times New Roman", serif',
+      shadowColor: '#ffd600',
+      shadowBlur: 16,
+      subtitle: 'ROMAN EMPIRE CASINO & RESORT',
+      subColor: '#ff0033',
+      subFont: 'bold 18px Arial, sans-serif'
+    });
+    const signMat = new THREE.MeshBasicMaterial({ map: signTex });
+    const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(24, 9), signMat);
+    signMesh.position.set(0, 31, 16.5);
+    palace.add(signMesh);
+
+    this.environmentGroup.add(palace);
+    this.buildingColliders.push({ x: x, z: z, radius: 28 });
+  }
+
+  buildSphinxStatue(x, y, z) {
+    const sphinx = new THREE.Group();
+    sphinx.position.set(x, y, z);
+    const goldMat = new THREE.MeshStandardMaterial({ color: 0xc99b38, roughness: 0.4, metalness: 0.6 });
+
+    // Body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(16, 12, 28), goldMat);
+    body.position.y = 6;
+    // Head / Headdress
+    const head = new THREE.Mesh(new THREE.ConeGeometry(5, 9, 8), goldMat);
+    head.position.set(0, 15, 10);
+    // Paws
+    const pawL = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 10), goldMat);
+    pawL.position.set(-6, 1.5, 16);
+    const pawR = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 10), goldMat);
+    pawR.position.set(6, 1.5, 16);
+
+    sphinx.add(body, head, pawL, pawR);
+    this.environmentGroup.add(sphinx);
+  }
+
+  buildFourDragonsCasino(x, y, z) {
+    const casino = new THREE.Group();
+    casino.position.set(x, y, z);
+
+    const wallMat = new THREE.MeshStandardMaterial({ color: 0x992222, roughness: 0.5 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3 });
+    const goldMat = new THREE.MeshBasicMaterial({ color: 0xffd600 });
+
+    // Multi-tier pagoda body
+    const t1 = new THREE.Mesh(new THREE.BoxGeometry(34, 14, 34), wallMat);
+    t1.position.y = 7;
+    const r1 = new THREE.Mesh(new THREE.ConeGeometry(26, 6, 4), roofMat);
+    r1.rotation.y = Math.PI / 4;
+    r1.position.y = 17;
+
+    const t2 = new THREE.Mesh(new THREE.BoxGeometry(24, 12, 24), wallMat);
+    t2.position.y = 23;
+    const r2 = new THREE.Mesh(new THREE.ConeGeometry(18, 5, 4), roofMat);
+    r2.rotation.y = Math.PI / 4;
+    r2.position.y = 31.5;
+
+    // Glowing Dragon Sign
+    const signTex = this.createSignTexture({
+      width: 512,
+      height: 192,
+      bgColor: '#1a0505',
+      borderColor: '#ffd600',
+      borderWidth: 6,
+      text: 'THE FOUR DRAGONS',
+      textColor: '#ffd600',
+      font: '900 36px "Arial Black", Arial, sans-serif',
+      shadowColor: '#ff0033',
+      shadowBlur: 16,
+      subtitle: '🐉 CASINO & ORIENTAL GARDENS 🐉',
+      subColor: '#ff3344',
+      subFont: 'bold 20px Arial, sans-serif'
+    });
+    const signMat = new THREE.MeshBasicMaterial({ map: signTex });
+    const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(20, 7.5), signMat);
+    signMesh.position.set(0, 36, 10);
+
+    casino.add(t1, r1, t2, r2, signMesh);
+    this.environmentGroup.add(casino);
+    this.buildingColliders.push({ x: x, z: z, radius: 25 });
+  }
+
+  buildStarfishCasino(x, y, z) {
+    const casino = new THREE.Group();
+    casino.position.set(x, y, z);
+
+    const blueGlass = new THREE.MeshStandardMaterial({ color: 0x003566, roughness: 0.1, metalness: 0.9 });
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(32, 65, 32), blueGlass);
+    tower.position.y = 32.5;
+
+    // Giant Illuminated Neon Starfish Emblem
+    const starTex = this.createSignTexture({
+      width: 512,
+      height: 256,
+      bgColor: '#001233',
+      borderColor: '#00f0ff',
+      borderWidth: 8,
+      text: '★ STARFISH CASINO ★',
+      textColor: '#00f0ff',
+      font: '900 38px "Arial Black", Arial, sans-serif',
+      shadowColor: '#00f0ff',
+      shadowBlur: 20,
+      subtitle: 'VIP SLOTS • HIGH ROLLER LOUNGE',
+      subColor: '#ffd600',
+      subFont: 'bold 20px Arial, sans-serif'
+    });
+    const starMat = new THREE.MeshBasicMaterial({ map: starTex });
+    const starMesh = new THREE.Mesh(new THREE.PlaneGeometry(22, 11), starMat);
+    starMesh.position.set(0, 48, 16.5);
+
+    casino.add(tower, starMesh);
+    this.environmentGroup.add(casino);
+    this.buildingColliders.push({ x: x, z: z, radius: 24 });
   }
 
   buildCasinoPyramid(x, y, z) {
@@ -1165,25 +1614,173 @@ class World3D {
   /* --------------------------------------------------------------------------
      GTA CITY 5: BLAINE COUNTY (San Andreas Countryside)
      Landmarks: Mount Chiliad, Route 68 Gas Station, Spinning Wind Turbines
+     Matches Real Image: Route 68 Road Decals, Coyote Bite Diner, Telephone Poles
      -------------------------------------------------------------------------- */
   buildBlaineCountyScenery(trackDef, timeOfDay) {
     const isNight = (timeOfDay === 'night');
 
-    // 1. Colossal Mount Chiliad Mountain Massif
-    this.buildMountChiliad(360, 0, -320);
+    // 1. Colossal Mount Chiliad Mountain Massif (safely placed in background)
+    this.buildMountChiliad(580, 0, -480);
 
-    // 2. Route 68 Desert Gas Station & Motel
-    this.buildRoute68GasStation(-120, 0, 210);
+    // 2. Coyote Bite Roadside Diner & Gas Station (matching Image 5)
+    this.buildCoyoteBiteDiner(-120, 0, 150);
 
-    // 3. Spinning Wind Turbine Farm (6 wind towers)
+    // 3. Stencil "ROUTE 68" Decals painted on the asphalt (matching Image 5)
+    this.buildRoute68RoadDecals(trackDef);
+
+    // 4. Wooden Utility Telephone Poles with crossarms (matching Image 5)
+    this.buildWoodenTelephonePoles(trackDef);
+
+    // 5. Spinning Wind Turbine Farm (safely placed 150m south)
     this.buildWindTurbineFarm();
 
-    // 4. Red Rock Canyon Buttes & Saguaro Cacti
+    // 6. Red Rock Canyon Buttes & Saguaro Cacti
     this.buildDesertMesasAndCacti(trackDef);
 
     // Guardrails & Desert Highway Lighting
     this.placeGuardrails(trackDef, 0xb55428);
     this.placeStreetlightsAlongCircuit(trackDef, 0xffd166, isNight);
+  }
+
+  buildRoute68RoadDecals(trackDef) {
+    const decalTex = this.createRoute68DecalTexture();
+    const decalMat = new THREE.MeshBasicMaterial({
+      map: decalTex,
+      transparent: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -2
+    });
+
+    const wps = trackDef.waypoints;
+    const indices = [0, 2, 4, 6].filter(i => i < wps.length);
+    indices.forEach(idx => {
+      const p1 = wps[idx];
+      const p2 = wps[(idx + 1) % wps.length];
+      const angle = Math.atan2(p2.x - p1.x, p2.z - p1.z);
+      const mx = (p1.x + p2.x) / 2;
+      const mz = (p1.z + p2.z) / 2;
+
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(9, 9), decalMat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.rotation.z = -angle;
+      mesh.position.set(mx, 0.08, mz);
+      this.environmentGroup.add(mesh);
+    });
+  }
+
+  buildWoodenTelephonePoles(trackDef) {
+    const poleMat = new THREE.MeshStandardMaterial({ color: 0x5a4332, roughness: 0.95 });
+    const armMat = new THREE.MeshStandardMaterial({ color: 0x3d2d22, roughness: 0.95 });
+    const wireMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+
+    const wps = trackDef.waypoints;
+    const poles = [];
+    for (let i = 0; i < wps.length; i++) {
+      const p1 = wps[i];
+      const p2 = wps[(i + 1) % wps.length];
+      const angle = Math.atan2(p2.x - p1.x, p2.z - p1.z);
+      const nx = -Math.cos(angle);
+      const nz = Math.sin(angle);
+      const offset = (trackDef.roadWidth || 28) / 2 + 14;
+
+      const px = p1.x + nx * offset;
+      const pz = p1.z + nz * offset;
+
+      const pole = new THREE.Group();
+      pole.position.set(px, 0, pz);
+
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, 14, 6), poleMat);
+      post.position.y = 7;
+      const cross = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.35, 0.35), armMat);
+      cross.position.y = 13;
+      cross.rotation.y = angle;
+
+      pole.add(post, cross);
+      this.environmentGroup.add(pole);
+      poles.push({ x: px, y: 13, z: pz });
+    }
+
+    // Connect power lines between adjacent poles
+    for (let i = 0; i < poles.length; i++) {
+      const next = (i + 1) % poles.length;
+      const pA = poles[i];
+      const pB = poles[next];
+      const dist = Math.hypot(pB.x - pA.x, pB.z - pA.z);
+      if (dist < 350) {
+        const lineGeo = new THREE.BufferGeometry().setFromPoints([
+          new THREE.Vector3(pA.x, pA.y, pA.z),
+          new THREE.Vector3((pA.x + pB.x) / 2, pA.y - 1.2, (pA.z + pB.z) / 2),
+          new THREE.Vector3(pB.x, pB.y, pB.z)
+        ]);
+        const line = new THREE.Line(lineGeo, wireMat);
+        this.environmentGroup.add(line);
+      }
+    }
+  }
+
+  buildCoyoteBiteDiner(x, y, z) {
+    const dinerGroup = new THREE.Group();
+    dinerGroup.position.set(x, y, z);
+
+    // Weathered rustic desert building matching Image 5
+    const woodMat = new THREE.MeshStandardMaterial({ color: 0x8a7055, roughness: 0.95 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x4a3a2d, roughness: 0.9 });
+    const bldg = new THREE.Mesh(new THREE.BoxGeometry(28, 7.5, 16), woodMat);
+    bldg.position.y = 3.75;
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(30, 1.2, 18), roofMat);
+    roof.position.y = 8.1;
+    dinerGroup.add(bldg, roof);
+
+    // Retro diner canopy
+    const canopyMat = new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.6 });
+    const canopy = new THREE.Mesh(new THREE.BoxGeometry(30, 0.8, 8), canopyMat);
+    canopy.position.set(0, 4.5, 11);
+    dinerGroup.add(canopy);
+
+    // Fuel pumps
+    const pumpMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 });
+    for (let p of [-8, 8]) {
+      const pump = new THREE.Mesh(new THREE.BoxGeometry(2.2, 3.5, 1.6), pumpMat);
+      pump.position.set(p, 1.75, 12);
+      dinerGroup.add(pump);
+    }
+
+    // Iconic "COYOTE BITE" Marquee Sign (matching Image 5)
+    const signTex = this.createSignTexture({
+      width: 512,
+      height: 256,
+      bgColor: '#16202c',
+      borderColor: '#00f0ff',
+      borderWidth: 10,
+      badge: '★ ROUTE 68 FAMOUS DINER ★',
+      badgeColor: '#ffd600',
+      text: 'COYOTE BITE',
+      textColor: '#00f0ff',
+      font: '900 48px "Arial Black", Arial, sans-serif',
+      shadowColor: '#00f0ff',
+      shadowBlur: 16,
+      subtitle: 'HOT COFFEE • GAS • COLD BEER',
+      subColor: '#ff0055',
+      subFont: 'bold 22px Arial, sans-serif'
+    });
+    const signMat = new THREE.MeshBasicMaterial({ map: signTex });
+    const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(16, 8), signMat);
+    signMesh.position.set(0, 13.5, 11.2);
+    dinerGroup.add(signMesh);
+
+    // Vintage parked jalopy cars
+    const rustMat1 = new THREE.MeshStandardMaterial({ color: 0x6e432c, roughness: 0.9 });
+    const rustMat2 = new THREE.MeshStandardMaterial({ color: 0x4a525d, roughness: 0.85 });
+    for (let c = 0; c < 3; c++) {
+      const jalopy = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.4, 5.2), c % 2 === 0 ? rustMat1 : rustMat2);
+      jalopy.position.set(-18 + c * 8, 0.7, 18);
+      jalopy.rotation.y = 0.2 * (c - 1);
+      dinerGroup.add(jalopy);
+    }
+
+    this.environmentGroup.add(dinerGroup);
+    this.buildingColliders.push({ x: x, z: z, radius: 26 });
   }
 
   buildMountChiliad(x, y, z) {
@@ -1252,8 +1849,8 @@ class World3D {
     const bladeMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
 
     for (let w = 0; w < 6; w++) {
-      const wx = 120 + w * 45;
-      const wz = -290 - (w % 2) * 50;
+      const wx = 30 + w * 45;
+      const wz = -480 - (w % 2) * 35;
 
       const turbine = new THREE.Group();
       turbine.position.set(wx, 0, wz);
@@ -1296,27 +1893,30 @@ class World3D {
     const rockMat = new THREE.MeshStandardMaterial({ color: 0xb55428, roughness: 0.95 });
     const cactusMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.8 });
 
-    // Tiered Mesas
+    // Tiered Mesas (strictly verified clear of track)
     for (let i = 0; i < 24; i++) {
       const angle = (i / 24) * Math.PI * 2;
-      const rad = 260 + (i % 3) * 90;
+      const rad = 280 + (i % 3) * 90;
       const rx = Math.cos(angle) * rad;
       const rz = Math.sin(angle) * rad;
 
-      const rw = 45 + Math.random() * 55;
+      const rw = 40 + Math.random() * 45;
       const rh = 35 + Math.random() * 70;
+      const reqDist = (trackDef.roadWidth || 26) / 2 + rw + 35;
+      if (this.isNearTrack(rx, rz, trackDef, reqDist)) continue;
 
       const mesa = new THREE.Mesh(new THREE.CylinderGeometry(rw * 0.7, rw, rh, 7), rockMat);
       mesa.position.set(rx, rh / 2, rz);
       this.environmentGroup.add(mesa);
     }
 
-    // 3D Saguaro Cacti
+    // 3D Saguaro Cacti (strictly verified clear of track)
     for (let i = 0; i < 50; i++) {
       const angle = Math.random() * Math.PI * 2;
       const dist = 140 + Math.random() * 280;
       const cx = Math.cos(angle) * dist;
       const cz = Math.sin(angle) * dist;
+      if (this.isNearTrack(cx, cz, trackDef, (trackDef.roadWidth || 26) / 2 + 20)) continue;
 
       const cactus = new THREE.Group();
       cactus.position.set(cx, 0, cz);
@@ -1492,6 +2092,407 @@ class World3D {
       this.environmentGroup.add(gateGroup);
       this.checkpoints3D.push(gateGroup);
     });
+  }
+
+  /* --------------------------------------------------------------------------
+     F1 CIRCUIT: AUTODROMO NAZIONALE MONZA (Temple of Speed)
+     -------------------------------------------------------------------------- */
+  buildMonzaScenery(trackDef, timeOfDay) {
+    // 1. F1 Pit Complex & Pit Lane Wall along Rettifilo Straight
+    this.buildMonzaPitComplex(trackDef);
+
+    // 2. F1 3D Starting Gantry with 5 Red Lights overhead
+    this.buildF1StartingGantry3D(trackDef);
+
+    // 3. Rolex, Pirelli, and DHL Overhead Sponsor Gantries
+    this.buildMonzaSponsorGantries(trackDef);
+
+    // 4. Italian Grand Prix Tifosi Grandstands along Rettifilo, Ascari & Parabolica
+    this.buildMonzaGrandstands(trackDef);
+
+    // 5. Official F1 Distance Braking Boards (150m, 100m, 50m) and DRS Activation signs
+    this.buildF1TracksideSignage(trackDef);
+
+    // 6. Lush Parco di Monza Poplar and Pine Trees (strictly setback from road)
+    this.buildMonzaParklandTrees(trackDef);
+  }
+
+  buildF1CircuitTrackMarkings(trackDef, curve, points, roadW) {
+    // Starting Grid Boxes: Staggered FIA Grid Slots with Pole Position
+    const gridMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const poleLineMat = new THREE.MeshBasicMaterial({ color: 0xffd600 });
+
+    const gridSlots = trackDef.startGrid || [
+      { x: -80, z: 256, angle: Math.PI / 2 },
+      { x: -120, z: 264, angle: Math.PI / 2 },
+      { x: -160, z: 256, angle: Math.PI / 2 },
+      { x: -200, z: 264, angle: Math.PI / 2 }
+    ];
+
+    gridSlots.forEach((slot, idx) => {
+      const slotGroup = new THREE.Group();
+      slotGroup.position.set(slot.x, 0.045, slot.z);
+      slotGroup.rotation.y = slot.angle || (Math.PI / 2);
+
+      // Grid box outline
+      const boxW = 2.4;
+      const boxL = 5.2;
+      const boxThick = 0.22;
+
+      // Front line
+      const frontLine = new THREE.Mesh(new THREE.PlaneGeometry(boxW, boxThick), idx === 0 ? poleLineMat : gridMat);
+      frontLine.rotation.x = -Math.PI / 2;
+      frontLine.position.set(0, 0, boxL / 2);
+      slotGroup.add(frontLine);
+
+      // Side lines
+      const leftLine = new THREE.Mesh(new THREE.PlaneGeometry(boxThick, boxL), gridMat);
+      leftLine.rotation.x = -Math.PI / 2;
+      leftLine.position.set(-boxW / 2, 0, 0);
+      const rightLine = new THREE.Mesh(new THREE.PlaneGeometry(boxThick, boxL), gridMat);
+      rightLine.rotation.x = -Math.PI / 2;
+      rightLine.position.set(boxW / 2, 0, 0);
+      slotGroup.add(leftLine, rightLine);
+
+      this.environmentGroup.add(slotGroup);
+    });
+
+    // Outer Tarmac Red & White Curbs around corner apexes
+    const curbRed = new THREE.MeshStandardMaterial({ color: 0xd90429, roughness: 0.8 });
+    const curbWhite = new THREE.MeshStandardMaterial({ color: 0xf8f9fa, roughness: 0.8 });
+
+    // Build apex piano kerbs near chicanes (Rettifilo at Turn 1/2, Roggia, Ascari)
+    const apexLocations = [
+      { x: 380, z: 235, len: 45, ang: 0.3 },
+      { x: 410, z: 200, len: 40, ang: 1.2 },
+      { x: 375, z: -155, len: 45, ang: -0.4 },
+      { x: 230, z: -275, len: 50, ang: -0.9 },
+      { x: -320, z: -225, len: 55, ang: 0.8 },
+      { x: -400, z: 90, len: 65, ang: 1.5 }
+    ];
+
+    apexLocations.forEach(apex => {
+      const kerbGroup = new THREE.Group();
+      kerbGroup.position.set(apex.x, 0.05, apex.z);
+      kerbGroup.rotation.y = apex.ang;
+
+      const numSlices = Math.floor(apex.len / 1.8);
+      for (let s = 0; s < numSlices; s++) {
+        const mat = (s % 2 === 0) ? curbRed : curbWhite;
+        const slice = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 1.4), mat);
+        slice.position.set((s - numSlices / 2) * 1.6, 0, 0);
+        kerbGroup.add(slice);
+      }
+      this.environmentGroup.add(kerbGroup);
+    });
+  }
+
+  buildMonzaPitComplex(trackDef) {
+    const pitBuilding = new THREE.Group();
+    // Positioned parallel to Rettifilo main straight (road is at z = 260, pit building is at z = 292)
+    pitBuilding.position.set(-150, 0, 292);
+
+    const concMat = new THREE.MeshStandardMaterial({ color: 0xd8dde6, roughness: 0.6, metalness: 0.2 });
+    const glassMat = new THREE.MeshStandardMaterial({ color: 0x1a2b3c, roughness: 0.1, metalness: 0.9, transparent: true, opacity: 0.85 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x181a20, roughness: 0.4 });
+    const redGlow = new THREE.MeshBasicMaterial({ color: 0xff0033 });
+
+    // Main 160m Long Modern Two-Story Pit Building
+    const mainBody = new THREE.Mesh(new THREE.BoxGeometry(160, 11, 20), concMat);
+    mainBody.position.y = 5.5;
+    pitBuilding.add(mainBody);
+
+    // Upper VIP Paddock Club continuous glass facade
+    const vipGlass = new THREE.Mesh(new THREE.BoxGeometry(158, 4.2, 0.4), glassMat);
+    vipGlass.position.set(0, 8.2, -10.1);
+    pitBuilding.add(vipGlass);
+
+    // 8 Authentic F1 Team Pit Garages along ground floor
+    const f1Teams = [
+      { name: 'SCUDERIA FERRARI', color: 0xe60000 },
+      { name: 'RED BULL RACING', color: 0x001a4d },
+      { name: 'MERCEDES-AMG F1', color: 0x00a19c },
+      { name: 'MCLAREN F1 TEAM', color: 0xff8000 },
+      { name: 'ASTON MARTIN F1', color: 0x00594f },
+      { name: 'ALPINE F1 TEAM', color: 0x0078d0 },
+      { name: 'WILLIAMS RACING', color: 0x005aff },
+      { name: 'HAAS F1 TEAM', color: 0x7c7c7c }
+    ];
+
+    f1Teams.forEach((team, idx) => {
+      const gx = -70 + idx * 20;
+
+      // Pit Garage Opening
+      const garageDoor = new THREE.Mesh(new THREE.BoxGeometry(16, 4.2, 0.4), darkMat);
+      garageDoor.position.set(gx, 2.2, -10.1);
+      pitBuilding.add(garageDoor);
+
+      // Team Header Neon Nameplate
+      const nameplateMat = new THREE.MeshBasicMaterial({ color: team.color });
+      const nameplate = new THREE.Mesh(new THREE.BoxGeometry(16, 0.8, 0.6), nameplateMat);
+      nameplate.position.set(gx, 4.8, -10.2);
+      pitBuilding.add(nameplate);
+    });
+
+    // Concrete Pit Wall separating Pit Lane from Track
+    const pitWall = new THREE.Mesh(new THREE.BoxGeometry(165, 1.3, 0.8), concMat);
+    pitWall.position.set(0, 0.65, -16.5);
+    pitBuilding.add(pitWall);
+
+    // Team Pit Perches & Radio Consoles on Pit Wall
+    for (let p = 0; p < 8; p++) {
+      const px = -65 + p * 18;
+      const perch = new THREE.Mesh(new THREE.BoxGeometry(3.5, 2.2, 2.2), darkMat);
+      perch.position.set(px, 1.4, -16.5);
+      pitBuilding.add(perch);
+
+      // Mini timing display screens
+      const screen = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.9, 0.2), new THREE.MeshBasicMaterial({ color: 0x00f0ff }));
+      screen.position.set(px, 2.0, -17.65);
+      pitBuilding.add(screen);
+    }
+
+    this.environmentGroup.add(pitBuilding);
+  }
+
+  buildF1StartingGantry3D(trackDef) {
+    // Positioned right at start/finish line on Rettifilo straight
+    const gantry = new THREE.Group();
+    gantry.position.set(-340, 0, 260);
+
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0x22262e, roughness: 0.4, metalness: 0.8 });
+    const blackMat = new THREE.MeshBasicMaterial({ color: 0x0a0a0a });
+    const rolexGreen = new THREE.MeshBasicMaterial({ color: 0x006039 });
+    const rolexGold = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+
+    const span = 28; // spans across the 26m track
+
+    // Left & Right Support Truss Pillars
+    const pL = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 12, 8), steelMat);
+    pL.position.set(0, 6, -span / 2);
+    const pR = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 12, 8), steelMat);
+    pR.position.set(0, 6, span / 2);
+    gantry.add(pL, pR);
+
+    // Overhead Heavy Truss Crossbeam
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.4, span + 2), steelMat);
+    beam.position.set(0, 11, 0);
+    gantry.add(beam);
+
+    // Central Starting Light Enclosure (Black housing)
+    const boxGeo = new THREE.BoxGeometry(0.8, 1.8, 9.5);
+    const lightBox = new THREE.Mesh(boxGeo, blackMat);
+    lightBox.position.set(-0.9, 9.8, 0);
+    gantry.add(lightBox);
+
+    // 5 Pairs of Red LED Cluster Lights
+    this.startingGantryLights3D = [];
+    for (let i = 0; i < 5; i++) {
+      const zPos = -3.2 + i * 1.6;
+      const lightGeo = new THREE.CylinderGeometry(0.32, 0.32, 0.2, 16);
+      lightGeo.rotateZ(Math.PI / 2);
+
+      const lightMat = new THREE.MeshStandardMaterial({
+        color: 0x2a0408,
+        emissive: 0x000000,
+        roughness: 0.2
+      });
+      const lightMesh = new THREE.Mesh(lightGeo, lightMat);
+      lightMesh.position.set(-1.25, 9.8, zPos);
+      gantry.add(lightMesh);
+      this.startingGantryLights3D.push(lightMesh);
+    }
+
+    // Rolex Sponsor Sign above Start Line
+    const rolexSign = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.2, 6.5), rolexGreen);
+    rolexSign.position.set(-1.0, 12.0, 0);
+    const rolexCrown = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.5, 2.0), rolexGold);
+    rolexCrown.position.set(-1.1, 12.0, 0);
+    gantry.add(rolexSign, rolexCrown);
+
+    this.environmentGroup.add(gantry);
+  }
+
+  setF1StartingLights3D(activeCount) {
+    if (!this.startingGantryLights3D) return;
+    for (let i = 0; i < 5; i++) {
+      const mesh = this.startingGantryLights3D[i];
+      if (mesh && mesh.material) {
+        if (i < activeCount) {
+          mesh.material.color.setHex(0xff0022);
+          if (mesh.material.emissive) mesh.material.emissive.setHex(0xff0011);
+        } else {
+          mesh.material.color.setHex(0x2a0408);
+          if (mesh.material.emissive) mesh.material.emissive.setHex(0x000000);
+        }
+      }
+    }
+  }
+
+  buildMonzaSponsorGantries(trackDef) {
+    const steelMat = new THREE.MeshStandardMaterial({ color: 0x2a2f38, roughness: 0.4, metalness: 0.7 });
+    const pirelliYellow = new THREE.MeshBasicMaterial({ color: 0xffd600 });
+    const pirelliRed = new THREE.MeshBasicMaterial({ color: 0xd90429 });
+    const dhlYellow = new THREE.MeshBasicMaterial({ color: 0xffcc00 });
+
+    // 1. Pirelli Gantry at Rettifilo (x = 100, z = 260)
+    const gantry1 = new THREE.Group();
+    gantry1.position.set(100, 0, 260);
+    gantry1.rotation.y = Math.PI / 2;
+
+    const span = 28;
+    const pL1 = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 11, 8), steelMat);
+    pL1.position.set(-span / 2, 5.5, 0);
+    const pR1 = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 11, 8), steelMat);
+    pR1.position.set(span / 2, 5.5, 0);
+    const b1 = new THREE.Mesh(new THREE.BoxGeometry(span + 2, 1.6, 1.2), pirelliYellow);
+    b1.position.set(0, 10.5, 0);
+    const redStripe = new THREE.Mesh(new THREE.BoxGeometry(span + 2.1, 0.4, 1.25), pirelliRed);
+    redStripe.position.set(0, 10.5, 0);
+    gantry1.add(pL1, pR1, b1, redStripe);
+    this.environmentGroup.add(gantry1);
+
+    // 2. DHL Fastest Lap Gantry on Serraglio Straight (x = -160, z = -320)
+    const gantry2 = new THREE.Group();
+    gantry2.position.set(-160, 0, -320);
+    gantry2.rotation.y = Math.PI / 2;
+    const pL2 = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 11, 8), steelMat);
+    pL2.position.set(-span / 2, 5.5, 0);
+    const pR2 = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 11, 8), steelMat);
+    pR2.position.set(span / 2, 5.5, 0);
+    const b2 = new THREE.Mesh(new THREE.BoxGeometry(span + 2, 1.6, 1.2), dhlYellow);
+    b2.position.set(0, 10.5, 0);
+    gantry2.add(pL2, pR2, b2);
+    this.environmentGroup.add(gantry2);
+  }
+
+  buildMonzaGrandstands(trackDef) {
+    const concMat = new THREE.MeshStandardMaterial({ color: 0xc4c9d4, roughness: 0.7 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0xd90429, roughness: 0.5 }); // Ferrari red roof
+    const seatMatRed = new THREE.MeshStandardMaterial({ color: 0xcc0000, roughness: 0.6 });
+    const seatMatWhite = new THREE.MeshStandardMaterial({ color: 0xf4f4f4, roughness: 0.6 });
+
+    const createGrandstand = (x, z, angle, length = 60) => {
+      const stand = new THREE.Group();
+      stand.position.set(x, 0, z);
+      stand.rotation.y = angle;
+
+      // Tiered stepped structure
+      const tiers = 6;
+      for (let t = 0; t < tiers; t++) {
+        const tierGeo = new THREE.BoxGeometry(length, 1.2, 2.0);
+        const tier = new THREE.Mesh(tierGeo, concMat);
+        tier.position.set(0, (t + 1) * 1.2, t * 2.0);
+        stand.add(tier);
+
+        // Seating row
+        const smat = (t % 2 === 0) ? seatMatRed : seatMatWhite;
+        const seatRow = new THREE.Mesh(new THREE.BoxGeometry(length * 0.95, 0.4, 0.6), smat);
+        seatRow.position.set(0, (t + 1) * 1.2 + 0.5, t * 2.0);
+        stand.add(seatRow);
+      }
+
+      // Slanted Overhanging Roof
+      const roof = new THREE.Mesh(new THREE.BoxGeometry(length + 4, 0.4, 16), roofMat);
+      roof.rotation.x = 0.2;
+      roof.position.set(0, tiers * 1.2 + 4.5, 6);
+      stand.add(roof);
+
+      return stand;
+    };
+
+    // 1. Tribuna Rettifilo (Main grandstand opposite the pits)
+    this.environmentGroup.add(createGrandstand(-150, 226, 0, 90));
+
+    // 2. Tribuna Variante Ascari
+    this.environmentGroup.add(createGrandstand(-330, -250, 0.8, 65));
+
+    // 3. Tribuna Curva Parabolica
+    this.environmentGroup.add(createGrandstand(-445, 120, 1.6, 75));
+  }
+
+  buildF1TracksideSignage(trackDef) {
+    const boardMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const textMat = new THREE.MeshBasicMaterial({ color: 0x111111 });
+    const drsGreen = new THREE.MeshBasicMaterial({ color: 0x00e676 });
+
+    const createBrakeBoard = (x, z, angle, distText) => {
+      const boardGroup = new THREE.Group();
+      boardGroup.position.set(x, 0, z);
+      boardGroup.rotation.y = angle;
+
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 2.2, 6), textMat);
+      post.position.y = 1.1;
+      const plate = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 0.1), boardMat);
+      plate.position.y = 1.8;
+      const textStripe = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.35, 0.12), textMat);
+      textStripe.position.y = 1.8;
+
+      boardGroup.add(post, plate, textStripe);
+      return boardGroup;
+    };
+
+    // Braking boards on left approach to Rettifilo Chicane
+    this.environmentGroup.add(createBrakeBoard(90, 246, Math.PI / 2, '150'));
+    this.environmentGroup.add(createBrakeBoard(140, 246, Math.PI / 2, '100'));
+    this.environmentGroup.add(createBrakeBoard(190, 246, Math.PI / 2, '50'));
+
+    // Braking boards before Variante Ascari
+    this.environmentGroup.add(createBrakeBoard(-280, -245, 0.8, '100'));
+    this.environmentGroup.add(createBrakeBoard(-305, -230, 0.8, '50'));
+
+    // DRS Zone 1 Sign on Rettifilo
+    const drsSign1 = new THREE.Group();
+    drsSign1.position.set(-60, 0, 275);
+    drsSign1.rotation.y = Math.PI / 2;
+    const drsPlate = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.2, 0.15), drsGreen);
+    drsPlate.position.y = 2.4;
+    const postD = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 2.4, 8), textMat);
+    postD.position.y = 1.2;
+    drsSign1.add(drsPlate, postD);
+    this.environmentGroup.add(drsSign1);
+  }
+
+  buildMonzaParklandTrees(trackDef) {
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3525, roughness: 0.9 });
+    const poplarMat = new THREE.MeshStandardMaterial({ color: 0x2d6a4f, roughness: 0.75 });
+    const pineMat = new THREE.MeshStandardMaterial({ color: 0x1b4332, roughness: 0.8 });
+
+    // 120 lush park trees scattered around Parco di Monza, guaranteed clear of tarmac
+    for (let i = 0; i < 120; i++) {
+      const angle = (i / 120) * Math.PI * 2;
+      const rad = 180 + ((i * 37) % 360);
+      const tx = Math.cos(angle) * rad;
+      const tz = Math.sin(angle) * rad;
+
+      // Ensure 24 meters clearance from the road centerline
+      if (this.isNearTrack(tx, tz, trackDef, 24)) continue;
+
+      const tree = new THREE.Group();
+      tree.position.set(tx, 0, tz);
+
+      const isPoplar = (i % 2 === 0);
+      if (isPoplar) {
+        // Tall Italian Cypress / Poplar
+        const h = 14 + (i % 8);
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.45, h * 0.3, 8), trunkMat);
+        trunk.position.y = (h * 0.3) / 2;
+        const foliage = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 2.2, h * 0.75, 8), poplarMat);
+        foliage.position.y = h * 0.6;
+        tree.add(trunk, foliage);
+      } else {
+        // Mediterranean Stone Pine
+        const h = 10 + (i % 6);
+        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.55, h * 0.6, 8), trunkMat);
+        trunk.position.y = (h * 0.6) / 2;
+        const crown = new THREE.Mesh(new THREE.SphereGeometry(3.5, 8, 6), pineMat);
+        crown.scale.set(1.4, 0.65, 1.4);
+        crown.position.y = h * 0.85;
+        tree.add(trunk, crown);
+      }
+
+      this.environmentGroup.add(tree);
+    }
   }
 
   flashCheckpoint(index) {

@@ -12,6 +12,146 @@ class Command(BaseCommand):
         self.stdout.write("Seeding real-life cars...")
         cars_data = [
             {
+                'slug': 'f1-2022-ferrari',
+                'name': 'F1-75 Scuderia (2022)',
+                'brand': 'Ferrari',
+                'year': 2022,
+                'category': 'Formula 1',
+                'engine': '1.6L Turbo Hybrid V6 (15,000 RPM)',
+                'drivetrain': 'RWD (8-Speed Seamless)',
+                'horsepower': 1020,
+                'top_speed_mph': 225,
+                'accel_0_60': 1.8,
+                'weight_kg': 798,
+                'handling_score': 99,
+                'braking_score': 100,
+                'price': 0, # Default Starter Car!
+                'is_default': True,
+                'default_color': '#c00000', # Scuderia Rosso Corsa
+                'badge_color': '#ffdf00',
+                'body_style': 'formula1',
+                'audio_pitch': 1.35,
+                'specs': {
+                    'torque_nm': 850,
+                    'rpm_redline': 15000,
+                    'boost_psi': 38.0,
+                    'livery': 'ferrari_f1_75',
+                    'accent_color': '#111111'
+                }
+            },
+            {
+                'slug': 'f1-2022-redbull',
+                'name': 'RB18 Oracle (2022)',
+                'brand': 'Red Bull Racing',
+                'year': 2022,
+                'category': 'Formula 1',
+                'engine': '1.6L Red Bull Powertrains V6 Turbo',
+                'drivetrain': 'RWD',
+                'horsepower': 1025,
+                'top_speed_mph': 226,
+                'accel_0_60': 1.8,
+                'weight_kg': 798,
+                'handling_score': 100,
+                'braking_score': 99,
+                'price': 15000,
+                'is_default': False,
+                'default_color': '#0c1635', # Matte Navy Blue
+                'badge_color': '#ffd600',
+                'body_style': 'formula1',
+                'audio_pitch': 1.38,
+                'specs': {
+                    'torque_nm': 860,
+                    'rpm_redline': 15000,
+                    'boost_psi': 38.5,
+                    'livery': 'redbull_rb18',
+                    'accent_color': '#e60012'
+                }
+            },
+            {
+                'slug': 'f1-2022-mercedes',
+                'name': 'W13 E Performance (2022)',
+                'brand': 'Mercedes-AMG F1',
+                'year': 2022,
+                'category': 'Formula 1',
+                'engine': '1.6L Mercedes-AMG M13 E V6 Turbo',
+                'drivetrain': 'RWD',
+                'horsepower': 1015,
+                'top_speed_mph': 224,
+                'accel_0_60': 1.9,
+                'weight_kg': 798,
+                'handling_score': 98,
+                'braking_score': 99,
+                'price': 14000,
+                'is_default': False,
+                'default_color': '#c4c9cc', # Silver Arrows
+                'badge_color': '#00a19c', # Petronas Teal
+                'body_style': 'formula1',
+                'audio_pitch': 1.34,
+                'specs': {
+                    'torque_nm': 840,
+                    'rpm_redline': 15000,
+                    'boost_psi': 37.5,
+                    'livery': 'mercedes_w13',
+                    'accent_color': '#00a19c'
+                }
+            },
+            {
+                'slug': 'mclaren-mp45',
+                'name': 'MP4/5 Honda V10 (1989)',
+                'brand': 'McLaren',
+                'year': 1989,
+                'category': 'Formula 1',
+                'engine': '3.5L Honda RA109E Naturally Aspirated V10',
+                'drivetrain': '6-Speed Manual RWD',
+                'horsepower': 685,
+                'top_speed_mph': 215,
+                'accel_0_60': 2.3,
+                'weight_kg': 540,
+                'handling_score': 97,
+                'braking_score': 95,
+                'price': 18000,
+                'is_default': False,
+                'default_color': '#ffffff',
+                'badge_color': '#ff0033',
+                'body_style': 'formula1_classic',
+                'audio_pitch': 1.45,
+                'specs': {
+                    'torque_nm': 490,
+                    'rpm_redline': 14000,
+                    'boost_psi': 0.0,
+                    'livery': 'senna_mp45',
+                    'accent_color': '#ff1100'
+                }
+            },
+            {
+                'slug': 'f1-2025-concept',
+                'name': 'Active Aero Concept (2025)',
+                'brand': 'Formula 1',
+                'year': 2025,
+                'category': 'Formula 1',
+                'engine': '1.6L Biofuel Hybrid + 350kW MGU-K',
+                'drivetrain': 'RWD Direct Drive Hybrid',
+                'horsepower': 1050,
+                'top_speed_mph': 230,
+                'accel_0_60': 1.7,
+                'weight_kg': 768,
+                'handling_score': 100,
+                'braking_score': 100,
+                'price': 25000,
+                'is_default': False,
+                'default_color': '#11141c',
+                'badge_color': '#ff0055',
+                'body_style': 'formula1_future',
+                'audio_pitch': 1.40,
+                'specs': {
+                    'torque_nm': 920,
+                    'rpm_redline': 15000,
+                    'boost_psi': 40.0,
+                    'livery': 'f1_2025_active_aero',
+                    'accent_color': '#00f0ff'
+                }
+            },
+            {
                 'slug': 'nissan-gtr-nismo',
                 'name': 'GT-R Nismo (R35)',
                 'brand': 'Nissan',
@@ -25,8 +165,8 @@ class Command(BaseCommand):
                 'weight_kg': 1720,
                 'handling_score': 88,
                 'braking_score': 87,
-                'price': 0, # Starter car!
-                'is_default': True,
+                'price': 1200,
+                'is_default': False,
                 'default_color': '#f2f2f2', # Pearl white
                 'badge_color': '#e60012',
                 'body_style': 'coupe',
@@ -55,7 +195,7 @@ class Command(BaseCommand):
                 'braking_score': 90,
                 'price': 2200,
                 'is_default': False,
-                'default_color': '#1f4068', # Isle of Man Green or Tanzanite Blue
+                'default_color': '#00334e', # Tanzanite Blue Metallic (Authentic FBX)
                 'badge_color': '#0099ff',
                 'body_style': 'sport_sedan',
                 'audio_pitch': 0.98,
@@ -83,7 +223,7 @@ class Command(BaseCommand):
                 'braking_score': 97,
                 'price': 3500,
                 'is_default': False,
-                'default_color': '#00bcd4', # Shark Blue
+                'default_color': '#ffffff', # Carrera RS 2.7 Tribute Pure White & Python Green
                 'badge_color': '#ffd600',
                 'body_style': 'gt_wing',
                 'audio_pitch': 1.15,
@@ -111,7 +251,7 @@ class Command(BaseCommand):
                 'braking_score': 95,
                 'price': 8500,
                 'is_default': False,
-                'default_color': '#e60026', # Corsa Rosso
+                'default_color': '#d40000', # Rosso Corsa
                 'badge_color': '#ffdf00',
                 'body_style': 'hypercar',
                 'audio_pitch': 1.05,
@@ -139,7 +279,7 @@ class Command(BaseCommand):
                 'braking_score': 94,
                 'price': 6500,
                 'is_default': False,
-                'default_color': '#06d6a0', # Verde Scandal
+                'default_color': '#1c7ed6', # Blu Laufey & Arancio Xanto
                 'badge_color': '#f77f00',
                 'body_style': 'snorkel_gt',
                 'audio_pitch': 1.10,
@@ -167,7 +307,7 @@ class Command(BaseCommand):
                 'braking_score': 96,
                 'price': 12000,
                 'is_default': False,
-                'default_color': '#ff6f00', # Papaya Spark Orange
+                'default_color': '#ff7300', # Papaya Spark Orange
                 'badge_color': '#ffffff',
                 'body_style': 'longtail',
                 'audio_pitch': 1.02,
@@ -195,7 +335,7 @@ class Command(BaseCommand):
                 'braking_score': 93,
                 'price': 22000,
                 'is_default': False,
-                'default_color': '#0d1b2a', # Nocturne Blue & Carbon
+                'default_color': '#0a0c10', # Nocturne Carbon Black & World Record Orange
                 'badge_color': '#e63946',
                 'body_style': 'longtail_hyper',
                 'audio_pitch': 0.88,
@@ -204,7 +344,7 @@ class Command(BaseCommand):
                     'rpm_redline': 7100,
                     'boost_psi': 34.0,
                     'livery': 'horseshoe_duotone',
-                    'accent_color': '#00b4d8'
+                    'accent_color': '#ff6200'
                 }
             },
             {
@@ -223,7 +363,7 @@ class Command(BaseCommand):
                 'braking_score': 88,
                 'price': 1500,
                 'is_default': False,
-                'default_color': '#1d3557', # Le Mans Blue
+                'default_color': '#253562', # Le Mans Blue Metallic (Authentic MTL)
                 'badge_color': '#0099ff',
                 'body_style': 'sport_sedan',
                 'audio_pitch': 0.94,
@@ -251,7 +391,7 @@ class Command(BaseCommand):
                 'braking_score': 91,
                 'price': 2800,
                 'is_default': False,
-                'default_color': '#0077b6', # Iconic Bayside Blue
+                'default_color': '#1b3f8b', # Iconic Bayside Blue (Authentic GLB)
                 'badge_color': '#e60012',
                 'body_style': 'gt_wing',
                 'audio_pitch': 1.05,
@@ -279,7 +419,7 @@ class Command(BaseCommand):
                 'braking_score': 90,
                 'price': 3200,
                 'is_default': False,
-                'default_color': '#111317', # Blauschwarz Metallic
+                'default_color': '#1a1c20', # Blauschwarz Metallic (Authentic GLB)
                 'badge_color': '#cccccc',
                 'body_style': 'dtm_wing',
                 'audio_pitch': 1.08,
@@ -297,6 +437,11 @@ class Command(BaseCommand):
         for cdata in cars_data:
             car, _ = Car.objects.update_or_create(slug=cdata['slug'], defaults=cdata)
             car_objs[car.slug] = car
+            # Update starter/unpainted user cars to their authentic factory color
+            PlayerCar.objects.filter(car=car, color__in=[
+                '#1f4068', '#00bcd4', '#e60026', '#06d6a0', '#ff6f00', '#0d1b2a',
+                '#1d3557', '#0077b6', '#111317', '#c00000', '#0c1635'
+            ]).update(color=car.default_color)
 
         self.stdout.write("Seeding tracks...")
         tracks_data = [
@@ -317,8 +462,9 @@ class Command(BaseCommand):
                 'layout_data': {
                     'circuit_type': 'city_street',
                     'biome': 'los_santos',
-                    'default_time': 'sunset',
-                    'available_times': ['sunset', 'day', 'night'],
+                    'vehicle_restriction': 'supercars_only',
+                    'default_time': 'day',
+                    'available_times': ['day', 'sunset', 'night'],
                     'curvature': 0.8,
                     'turns': 11
                 }
@@ -340,8 +486,9 @@ class Command(BaseCommand):
                 'layout_data': {
                     'circuit_type': 'coastal_waterfront',
                     'biome': 'vice_city',
-                    'default_time': 'night',
-                    'available_times': ['night', 'sunset', 'day'],
+                    'vehicle_restriction': 'supercars_only',
+                    'default_time': 'sunset',
+                    'available_times': ['sunset', 'night', 'day'],
                     'curvature': 0.8,
                     'turns': 11
                 }
@@ -363,6 +510,7 @@ class Command(BaseCommand):
                 'layout_data': {
                     'circuit_type': 'expressway',
                     'biome': 'liberty_city',
+                    'vehicle_restriction': 'supercars_only',
                     'default_time': 'night',
                     'available_times': ['night', 'day', 'sunset'],
                     'curvature': 0.7,
@@ -386,6 +534,7 @@ class Command(BaseCommand):
                 'layout_data': {
                     'circuit_type': 'strip_highway',
                     'biome': 'las_venturas',
+                    'vehicle_restriction': 'supercars_only',
                     'default_time': 'night',
                     'available_times': ['night', 'sunset', 'day'],
                     'curvature': 0.7,
@@ -409,10 +558,37 @@ class Command(BaseCommand):
                 'layout_data': {
                     'circuit_type': 'canyon_highway',
                     'biome': 'blaine_county',
+                    'vehicle_restriction': 'supercars_only',
                     'default_time': 'day',
                     'available_times': ['day', 'sunset', 'night'],
                     'curvature': 0.8,
                     'turns': 11
+                }
+            },
+            {
+                'slug': 'monza-f1',
+                'name': 'Monza: Temple of Speed',
+                'country': 'Lombardy, Italy (Autodromo Nazionale Monza)',
+                'difficulty': 'Extreme',
+                'laps': 3,
+                'length_km': 5.79,
+                'theme': 'monza_f1',
+                'surface': 'FIA Grade 1 Super-Smooth Tarmac',
+                'base_reward': 2500,
+                'base_xp': 1200,
+                'record_time': 78.90,
+                'record_holder': 'Charles_L',
+                'description': 'The legendary Temple of Speed featuring the flat-out Rettifilo straight, Variante del Rettifilo chicane, Curva Grande, Roggia, Lesmo 1 & 2, Serraglio straight, Variante Ascari, and the high-speed Curva Parabolica.',
+                'layout_data': {
+                    'circuit_type': 'f1_grand_prix',
+                    'biome': 'monza_f1',
+                    'default_time': 'day',
+                    'available_times': ['day', 'sunset', 'night'],
+                    'curvature': 0.9,
+                    'turns': 11,
+                    'drs_zones': 2,
+                    'is_f1_track': True,
+                    'vehicle_restriction': 'f1_only'
                 }
             }
         ]
@@ -426,7 +602,8 @@ class Command(BaseCommand):
             {'code': 'speed_demon', 'title': 'Speed Demon', 'description': 'Surpass 200 mph in a single race', 'reward_coins': 500, 'icon': '⚡'},
             {'code': 'champion', 'title': 'Undisputed Champion', 'description': 'Win 5 races in 1st place', 'reward_coins': 1000, 'icon': '👑'},
             {'code': 'collector', 'title': 'Garage Collector', 'description': 'Own 3 or more real-life supercars', 'reward_coins': 1500, 'icon': '🏎️'},
-            {'code': 'drift_master', 'title': 'Tokyo Drift Master', 'description': 'Execute a power drift around Alpine or Monaco hairpins', 'reward_coins': 800, 'icon': '🔥'}
+            {'code': 'drift_master', 'title': 'Tokyo Drift Master', 'description': 'Execute a power drift around Alpine or Monaco hairpins', 'reward_coins': 800, 'icon': '🔥'},
+            {'code': 'f1_legend', 'title': 'Grand Prix Winner', 'description': 'Take victory at Monza in an authentic Formula 1 car', 'reward_coins': 2000, 'icon': '🏁'}
         ]
 
         for adata in achievements_data:
@@ -452,13 +629,17 @@ class Command(BaseCommand):
             }
         )
 
-        # Ensure default car unlocked
-        gtr = car_objs.get('nissan-gtr-nismo')
-        if gtr:
-            PlayerCar.objects.get_or_create(
+        # Ensure default Ferrari F1-75 is unlocked and selected for starter player
+        ferrari_f1 = car_objs.get('f1-2022-ferrari')
+        if ferrari_f1:
+            # Deselect any other cars
+            PlayerCar.objects.filter(player=profile).update(is_selected=False)
+            p_car, _ = PlayerCar.objects.get_or_create(
                 player=profile,
-                car=gtr,
-                defaults={'is_selected': True, 'color': gtr.default_color}
+                car=ferrari_f1,
+                defaults={'is_selected': True, 'color': ferrari_f1.default_color}
             )
+            p_car.is_selected = True
+            p_car.save()
 
         self.stdout.write(self.style.SUCCESS("Successfully seeded real-life cars, tracks, and achievements!"))

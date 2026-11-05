@@ -12,7 +12,26 @@ window.CarModels3D = {
   // Tracks loading status: 'idle' | 'loading' | 'loaded' | 'error'
   loadingStatus: {},
 
-  // Config mapping for all 10 real-life 3D car models
+  // Original factory colors matching the authentic 3D source files in /Users/roshan/Downloads/3d-models/
+  ORIGINAL_CAR_COLORS: {
+    'ferrari-sf90-stradale': '#d40000', // Rosso Corsa Ferrari Red
+    'porsche-911-gt3-rs': '#ffffff',     // Carrera RS 2.7 Tribute Pure White & Python Green graphics
+    'lamborghini-huracan-sto': '#1c7ed6', // Blu Laufey with Arancio Xanto orange accents
+    'bugatti-chiron-ss': '#0a0c10',      // Nocturne Carbon Black & World Record Orange stripes
+    'mclaren-765lt': '#ff7300',          // Papaya Spark Orange
+    'mercedes-190e-evo2': '#1a1c20',     // Blauschwarz Metallic
+    'nissan-gtr-nismo': '#f2f2f2',       // Pearl White with Nismo Red trim
+    'nissan-skyline-r34': '#1b3f8b',     // Iconic Bayside Blue
+    'bmw-m3-competition': '#00334e',     // Tanzanite Blue Metallic (Authentic FBX)
+    'bmw-m5-e39': '#253562',             // Le Mans Blue Metallic (Authentic MTL)
+    'f1-2022-ferrari': '#d90429',        // Scuderia Ferrari Matte Rosso Corsa
+    'f1-2022-redbull': '#0c162c',        // Oracle Red Bull Racing Navy
+    'f1-2022-mercedes': '#c4c9cc',       // Mercedes Silver Arrow
+    'mclaren-mp45': '#ffffff',           // Marlboro Senna Red & White
+    'f1-2025-concept': '#11141c'         // Active Aero Carbon Black & Cyan
+  },
+
+  // Config mapping for all real-life 3D car models
   REAL_MODEL_CONFIGS: {
     'bugatti-chiron-ss': {
       format: 'fbx',
@@ -20,7 +39,53 @@ window.CarModels3D = {
       resourcePath: '/static/models/cars/bugatti-chiron-ss/',
       targetLength: 4.77
     },
-    // BMW M3 and M5 use high-fidelity procedural 3D builders to prevent 71MB/52MB file lockups
+    // Formula 1 Grand Prix 3D Models
+    'f1-2022-ferrari': {
+      format: 'obj',
+      objUrl: '/static/models/cars/f1-2022-ferrari/F1-2022-V3.obj',
+      mtlUrl: '/static/models/cars/f1-2022-ferrari/F1-2022-V3.mtl',
+      resourcePath: '/static/models/cars/f1-2022-ferrari/',
+      targetLength: 5.50
+    },
+    'f1-2022-redbull': {
+      format: 'obj',
+      objUrl: '/static/models/cars/f1-2022-redbull/F1-2022-V3.obj',
+      mtlUrl: '/static/models/cars/f1-2022-redbull/F1-2022-V3.mtl',
+      resourcePath: '/static/models/cars/f1-2022-redbull/',
+      targetLength: 5.50
+    },
+    'f1-2022-mercedes': {
+      format: 'obj',
+      objUrl: '/static/models/cars/f1-2022-mercedes/F1-2022-V3.obj',
+      mtlUrl: '/static/models/cars/f1-2022-mercedes/F1-2022-V3.mtl',
+      resourcePath: '/static/models/cars/f1-2022-mercedes/',
+      targetLength: 5.50
+    },
+    'f1-2025-concept': {
+      format: 'fbx',
+      url: '/static/models/cars/f1-2025-concept/model.fbx',
+      resourcePath: '/static/models/cars/f1-2025-concept/',
+      rotationY: Math.PI,
+      targetLength: 5.50
+    },
+    'mclaren-mp45': {
+      format: 'gltf',
+      url: '/static/models/cars/mclaren-mp45/model.glb',
+      targetLength: 4.85
+    },
+    'bmw-m3-competition': {
+      format: 'fbx',
+      url: '/static/models/cars/bmw-m3-competition/model.fbx',
+      resourcePath: '/static/models/cars/bmw-m3-competition/',
+      targetLength: 4.79
+    },
+    'bmw-m5-e39': {
+      format: 'obj',
+      objUrl: '/static/models/cars/bmw-m5-e39/model.obj',
+      mtlUrl: '/static/models/cars/bmw-m5-e39/model.mtl',
+      resourcePath: '/static/models/cars/bmw-m5-e39/',
+      targetLength: 4.78
+    },
     'ferrari-sf90-stradale': {
       format: 'gltf',
       url: '/static/models/cars/ferrari-sf90-stradale/model.glb',
@@ -69,20 +134,62 @@ window.CarModels3D = {
    * 3. Centers horizontally (X and Z at 0) and places bottom at ground level (Y = 0)
    * 4. Enables shadows and enhances materials
    */
-  normalizeRealModel(rawObj, targetLength = 4.65) {
+  normalizeRealModel(rawObj, targetLength = 4.65, slug = '') {
     const wrapper = new THREE.Group();
     wrapper.name = 'normalizedModelRoot';
     wrapper.add(rawObj);
     wrapper.updateMatrixWorld(true);
 
-    let box = new THREE.Box3().setFromObject(wrapper);
+    // 1. Hide watermarks, 2D UV guides, creator text, and camera/light helpers
+    rawObj.traverse(child => {
+      const name = (child.name || '').toLowerCase();
+      if (
+        name.includes('creator') || name.includes('uv_map') ||
+        name.includes('plane.001') || name.includes('watermark') ||
+        name.includes('helper') || name.includes('camera') ||
+        name.includes('light')
+      ) {
+        child.visible = false;
+      }
+    });
+
+    // 2. Model-specific rotation offset if configured
+    const config = (slug && this.REAL_MODEL_CONFIGS[slug]) ? this.REAL_MODEL_CONFIGS[slug] : {};
+    if (config.rotationY) {
+      rawObj.rotation.y += config.rotationY;
+      rawObj.updateMatrixWorld(true);
+    }
+
+    // 3. Measure bounding box based ONLY on visible car geometry
+    let box = new THREE.Box3();
+    rawObj.traverse(child => {
+      if (child.isMesh && child.visible) {
+        box.expandByObject(child);
+      }
+    });
+    if (box.isEmpty()) box.setFromObject(wrapper);
     let size = box.getSize(new THREE.Vector3());
 
-    // Orient length along Z
+    // Orient length along Z (handles CAD models exported standing along Y or sideways along X)
+    if (size.y > size.z * 1.2) {
+      rawObj.rotation.x -= Math.PI / 2;
+      rawObj.updateMatrixWorld(true);
+      box.makeEmpty();
+      rawObj.traverse(child => {
+        if (child.isMesh && child.visible) box.expandByObject(child);
+      });
+      if (box.isEmpty()) box.setFromObject(wrapper);
+      size = box.getSize(new THREE.Vector3());
+    }
+
     if (size.x > size.z * 1.2) {
       rawObj.rotation.y += Math.PI / 2;
-      wrapper.updateMatrixWorld(true);
-      box.setFromObject(wrapper);
+      rawObj.updateMatrixWorld(true);
+      box.makeEmpty();
+      rawObj.traverse(child => {
+        if (child.isMesh && child.visible) box.expandByObject(child);
+      });
+      if (box.isEmpty()) box.setFromObject(wrapper);
       size = box.getSize(new THREE.Vector3());
     }
 
@@ -93,19 +200,22 @@ window.CarModels3D = {
     wrapper.updateMatrixWorld(true);
 
     // Center on X and Z, align bottom of wheels to ground level Y = 0
-    box.setFromObject(wrapper);
+    box.makeEmpty();
+    rawObj.traverse(child => {
+      if (child.isMesh && child.visible) box.expandByObject(child);
+    });
+    if (box.isEmpty()) box.setFromObject(wrapper);
     const center = box.getCenter(new THREE.Vector3());
     rawObj.position.x -= center.x;
     rawObj.position.z -= center.z;
     rawObj.position.y -= box.min.y;
     wrapper.updateMatrixWorld(true);
 
-    // Enable optimized shadows and PBR automotive properties
+    // 4. Enable optimized shadows and upgrade to authentic PBR Standard Materials
     rawObj.traverse(child => {
       if (child.isMesh) {
         child.receiveShadow = true;
 
-        // Only major body panels cast shadows; skip glass, interior parts, badges, screws, and small trim
         const meshName = (child.name || '').toLowerCase();
         const isGlass = meshName.includes('glass') || meshName.includes('window') || meshName.includes('windshield');
         const isMinorDetail = meshName.includes('interior') || meshName.includes('badge') || meshName.includes('screw') ||
@@ -124,24 +234,105 @@ window.CarModels3D = {
 
         if (child.material) {
           const mats = Array.isArray(child.material) ? child.material : [child.material];
-          mats.forEach(m => {
-            m.side = THREE.DoubleSide;
-            // BackSide shadow mapping eliminates self-shadow acne on curved automotive panels
-            m.shadowSide = THREE.BackSide;
-            if (m.roughness !== undefined) {
-              m.roughness = Math.min(Math.max(m.roughness, 0.15), 0.85);
+          const newMats = mats.map(m => {
+            const matName = (m.name || '').toLowerCase();
+            const isTyre = matName.includes('tyre') || matName.includes('tire') || meshName.includes('wheel') || meshName.includes('tyre') || meshName.includes('tire');
+            const isRim = (
+              matName.includes('rim') || matName.includes('chrome') || matName.includes('metallic') || matName.includes('brake') ||
+              matName.includes('hub') || meshName.includes('hub') || meshName.includes('rim') ||
+              matName.includes('spoke') || meshName.includes('spoke') ||
+              matName.includes('lip') || meshName.includes('lip') ||
+              matName.includes('bolt') || meshName.includes('bolt') ||
+              matName.includes('fuelpressure')
+            );
+            const isDisc = matName.includes('disc') || meshName.includes('disc') || matName.includes('rotor') || meshName.includes('rotor');
+            const isCarbon = matName.includes('carbon');
+            const isLivery = matName.includes('livery') || matName.includes('paint') || matName.includes('body');
+
+            let roughness = 0.35;
+            let metalness = 0.2;
+            if (isTyre) {
+              roughness = 0.88;
+              metalness = 0.05;
+            } else if (isRim || isDisc) {
+              roughness = 0.22;
+              metalness = 0.88;
+            } else if (isCarbon) {
+              roughness = 0.40;
+              metalness = 0.25;
+            } else if (isLivery) {
+              roughness = 0.18;
+              metalness = 0.35;
             }
-            // Fix opaque or untextured glass exports to authentic tinted automotive glass
+
+            let stdMat = m;
+            // Upgrade Phong or Basic materials to PBR MeshStandardMaterial
+            if (m.isMeshPhongMaterial || m.isMeshBasicMaterial) {
+              stdMat = new THREE.MeshStandardMaterial({
+                name: m.name,
+                color: (m.color && !m.map) ? m.color.clone() : new THREE.Color(0xffffff),
+                map: m.map || null,
+                roughness: roughness,
+                metalness: metalness,
+                side: THREE.DoubleSide,
+                shadowSide: THREE.BackSide
+              });
+              if (!isTyre && !isRim && !isDisc && (m.transparent || m.opacity < 0.95)) {
+                stdMat.transparent = true;
+                stdMat.opacity = m.opacity;
+              }
+            } else {
+              m.side = THREE.DoubleSide;
+              m.shadowSide = THREE.BackSide;
+              if (m.roughness !== undefined) m.roughness = roughness;
+              if (m.metalness !== undefined) m.metalness = metalness;
+            }
+
+            // Authentic tyre rubber protection: tyres are always solid opaque matte charcoal
+            if (isTyre) {
+              stdMat.transparent = false;
+              stdMat.opacity = 1.0;
+              stdMat.depthWrite = true;
+              stdMat.roughness = 0.88;
+              stdMat.metalness = 0.05;
+              if (!stdMat.map || matName.includes('tire1')) {
+                stdMat.map = null;
+                stdMat.color = new THREE.Color(0x181818);
+              }
+            } else if (isRim) {
+              stdMat.transparent = false;
+              stdMat.opacity = 1.0;
+              stdMat.depthWrite = true;
+              stdMat.roughness = 0.22;
+              stdMat.metalness = 0.88;
+              // Rims, spokes, lips, bolts and hubs: preserve authentic texture if present, otherwise solid metallic silver alloy
+              if (!stdMat.map || matName.includes('spoke') || matName.includes('lip') || matName.includes('bolt') || matName.includes('fuelpressure')) {
+                stdMat.map = null;
+                stdMat.color = new THREE.Color(0xd4d8e0);
+              }
+            } else if (isDisc) {
+              stdMat.transparent = false;
+              stdMat.opacity = 1.0;
+              stdMat.depthWrite = true;
+              stdMat.color = new THREE.Color(0x525860);
+              stdMat.roughness = 0.35;
+              stdMat.metalness = 0.85;
+            }
+
             if (isGlass) {
-              m.transparent = true;
-              m.opacity = 0.52;
-              m.roughness = 0.08;
-              m.metalness = 0.88;
-              if (m.color && (m.color.r > 0.55 && m.color.g > 0.55 && m.color.b > 0.55)) {
-                m.color.setHex(0x18202c);
+              stdMat.transparent = true;
+              stdMat.opacity = 0.52;
+              stdMat.roughness = 0.08;
+              stdMat.metalness = 0.88;
+              if (stdMat.color && (stdMat.color.r > 0.55 && stdMat.color.g > 0.55 && stdMat.color.b > 0.55)) {
+                stdMat.color.setHex(0x18202c);
               }
             }
+
+            return stdMat;
           });
+
+          child.material = Array.isArray(child.material) ? newMats : newMats[0];
         }
       }
     });
@@ -223,11 +414,11 @@ window.CarModels3D = {
   },
 
   /**
-   * Applies custom paint color to primary body meshes in the real model.
+   * Restores 100% authentic original factory colors, textures, and liveries
+   * matching the source files in /Users/roshan/Downloads/3d-models/.
    */
-  applyRealModelColor(model, colorHex, slug = '') {
-    if (!model || !colorHex) return;
-    const color = new THREE.Color(colorHex);
+  restoreOriginalModelColors(model, slug = '') {
+    if (!model) return;
 
     model.traverse(child => {
       if (child.isMesh && child.material) {
@@ -236,21 +427,251 @@ window.CarModels3D = {
 
         mats.forEach(mat => {
           const matName = (mat.name || '').toLowerCase();
-          let isBodyPaint = false;
 
-          // 1. Universal paint / body keyword matching
-          if (
-            matName.includes('paint') || matName.includes('carpaint') ||
-            matName.includes('body_paint') || matName.includes('paint_material') ||
-            matName.includes('coloured_material') || matName.includes('coloured_geo') ||
-            meshName.includes('paint_geo') || meshName.includes('coloured_geo') ||
-            meshName.includes('body_lod') || meshName.includes('kit1_paint') ||
-            meshName.startsWith('polysurface')
-          ) {
-            isBodyPaint = true;
+          // 1. Textures & official liveries: keep texture pristine with full-white modulation
+          if (mat.map) {
+            mat.color.setHex(0xffffff);
+            mat.needsUpdate = true;
           }
 
-          // 2. Model-specific paint target matching
+          // 2. Wheels / Rims: if no texture, gleaming metallic alloy silver
+          const isRim = (
+            matName.includes('rim') || matName.includes('spoke') || matName.includes('lip') ||
+            matName.includes('bolt') || matName.includes('hub') || matName.includes('fuelpressure') ||
+            meshName.includes('spoke') || meshName.includes('lip') || meshName.includes('bolt') ||
+            meshName.includes('hub') || meshName.includes('rim')
+          );
+          if (isRim && !mat.map) {
+            mat.color.setHex(0xd4d8e0);
+            mat.metalness = 0.88;
+            mat.roughness = 0.22;
+            mat.needsUpdate = true;
+          }
+
+          // 3. Tires: solid matte charcoal rubber
+          const isTyre = (
+            matName.includes('tyre') || matName.includes('tire') ||
+            meshName.includes('tyre') || meshName.includes('tire')
+          );
+          if (isTyre) {
+            mat.color.setHex(0x181818);
+            mat.roughness = 0.88;
+            mat.metalness = 0.05;
+            mat.transparent = false;
+            mat.opacity = 1.0;
+            mat.depthWrite = true;
+            mat.needsUpdate = true;
+          }
+
+          // 4. Model-specific authentic factory paint restorations
+          switch (slug) {
+            case 'ferrari-sf90-stradale':
+              if (meshName === 'mesh_0') {
+                mat.color.setHex(0xd40000); // Rosso Corsa Ferrari Red
+                mat.metalness = 0.72;
+                mat.roughness = 0.16;
+                mat.needsUpdate = true;
+              }
+              break;
+
+            case 'bmw-m3-competition':
+              if (['model_16', 'model_17', 'model_18', 'model_13', 'model_20', 'model_21', 'model_36'].includes(meshName)) {
+                mat.color.setHex(0x00334e); // Tanzanite Blue Metallic (Authentic FBX)
+                mat.metalness = 0.65;
+                mat.roughness = 0.22;
+                mat.needsUpdate = true;
+              } else if (['model_10', 'model_11'].includes(meshName)) {
+                mat.color.setHex(0x0e0e0e); // Shadowline gloss black roof/trim
+                mat.metalness = 0.35;
+                mat.roughness = 0.40;
+                mat.needsUpdate = true;
+              } else if (meshName === 'model_14') {
+                mat.color.setHex(0xbc2b03); // M Sport red calipers
+                mat.needsUpdate = true;
+              }
+              break;
+
+            case 'bmw-m5-e39':
+              if (
+                meshName.includes('body002body0111') || matName.includes('body002body0111') ||
+                matName.includes('c1mtl') || meshName.includes('ucanpaintthis')
+              ) {
+                mat.color.setHex(0x253562); // Le Mans Blue Metallic (Authentic MTL)
+                mat.metalness = 0.60;
+                mat.roughness = 0.24;
+                mat.needsUpdate = true;
+              } else if (matName.includes('starroof')) {
+                mat.color.setHex(0x001a33); // StarRoof deep navy
+                mat.needsUpdate = true;
+              } else if (matName.includes('trunkbadge00052')) {
+                mat.color.setHex(0x0022cc); // M badge blue
+                mat.needsUpdate = true;
+              } else if (matName.includes('trunkbadge00051')) {
+                mat.color.setHex(0xcc0000); // M badge red
+                mat.needsUpdate = true;
+              } else if (matName.includes('rearbodyandcamera')) {
+                mat.color.setHex(0x18202c);
+                mat.needsUpdate = true;
+              }
+              break;
+
+            case 'nissan-skyline-r34':
+              if (
+                matName.includes('hood1mtl') || matName.includes('door1mtl') || matName.includes('door2mtl') ||
+                meshName === 'object_35' || meshName === 'object_36' ||
+                meshName === 'object_8' || meshName === 'object_9' ||
+                meshName === 'object_21' || meshName === 'object_22'
+              ) {
+                mat.color.setHex(0x1b3f8b); // Iconic Bayside Blue
+                mat.metalness = 0.70;
+                mat.roughness = 0.20;
+                mat.needsUpdate = true;
+              }
+              break;
+
+            case 'porsche-911-gt3-rs':
+              // Carrera RS 2.7 Tribute Pure White with Python Green graphics
+              if (mat.map) {
+                mat.color.setHex(0xffffff);
+              } else if (matName.includes('paint') || matName.includes('coloured')) {
+                mat.color.setHex(0xffffff);
+                mat.metalness = 0.40;
+                mat.roughness = 0.20;
+              }
+              mat.needsUpdate = true;
+              break;
+
+            case 'bugatti-chiron-ss':
+              // World Record Edition: Nocturne Carbon Black & World Record Orange stripes
+              if (mat.map) {
+                mat.color.setHex(0xffffff);
+              } else if (matName.includes('paint')) {
+                mat.color.setHex(0x0a0c10); // Nocturne Carbon Black
+                mat.metalness = 0.65;
+                mat.roughness = 0.22;
+              }
+              mat.needsUpdate = true;
+              break;
+
+            case 'lamborghini-huracan-sto':
+              if (mat.map) {
+                mat.color.setHex(0xffffff);
+              } else if (matName.includes('paint')) {
+                mat.color.setHex(0x1c7ed6); // Blu Laufey
+                mat.metalness = 0.55;
+                mat.roughness = 0.25;
+              } else if (matName.includes('coloured')) {
+                mat.color.setHex(0xff5400); // Arancio Xanto orange accents
+              }
+              mat.needsUpdate = true;
+              break;
+
+            case 'mclaren-765lt':
+              if (mat.map) {
+                mat.color.setHex(0xffffff);
+              } else if (matName.includes('paint')) {
+                mat.color.setHex(0xff7300); // Papaya Spark Orange
+                mat.metalness = 0.55;
+                mat.roughness = 0.18;
+              }
+              mat.needsUpdate = true;
+              break;
+
+            case 'nissan-gtr-nismo':
+              if (mat.map) {
+                mat.color.setHex(0xffffff);
+              } else if (matName.includes('paint') || matName.includes('coloured')) {
+                mat.color.setHex(0xf2f2f2); // Pearl White
+              }
+              mat.needsUpdate = true;
+              break;
+
+            case 'mercedes-190e-evo2':
+              if (mat.map) {
+                mat.color.setHex(0xffffff);
+              } else if (matName.includes('paint') || meshName.includes('_ext')) {
+                mat.color.setHex(0x1a1c20); // Blauschwarz Metallic
+              }
+              mat.needsUpdate = true;
+              break;
+
+            case 'f1-2022-ferrari':
+            case 'f1-2022-redbull':
+            case 'f1-2022-mercedes':
+            case 'mclaren-mp45':
+            case 'f1-2025-concept':
+              if (mat.map) {
+                mat.color.setHex(0xffffff);
+                mat.needsUpdate = true;
+              }
+              break;
+          }
+        });
+      }
+    });
+  },
+
+  /**
+   * Applies custom paint color to primary body meshes in the real model.
+   * If isCustom is false or colorHex matches factory original, restores authentic 3D file colors.
+   */
+  applyRealModelColor(model, colorHex, slug = '', isCustom = false) {
+    if (!model || !colorHex) return;
+
+    const isF1 = slug.startsWith('f1-') || slug === 'mclaren-mp45';
+    const originalHex = this.ORIGINAL_CAR_COLORS[slug] || '';
+    const isOriginal = isF1 || !isCustom || (originalHex && colorHex.toLowerCase() === originalHex.toLowerCase());
+
+    // In default / factory state (or for all Formula 1 liveries), restore 100% original model colors from the 3D source files
+    if (isOriginal) {
+      this.restoreOriginalModelColors(model, slug);
+      return;
+    }
+
+    const color = new THREE.Color(colorHex);
+
+    model.traverse(child => {
+      if (child.isMesh && child.material) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        const meshName = (child.name || '').toLowerCase();
+
+        mats.forEach(mat => {
+          // NEVER tint textured materials (official liveries, decals, carbon fiber, badges, lights)
+          if (mat.map) {
+            mat.color.setHex(0xffffff);
+            mat.needsUpdate = true;
+            return;
+          }
+
+          let isBodyPaint = false;
+          const matName = (mat.name || '').toLowerCase();
+          const isNonPaint = (
+            matName.includes('glass') || matName.includes('window') || matName.includes('windshield') ||
+            matName.includes('tire') || matName.includes('tyre') || matName.includes('wheel') ||
+            matName.includes('rim') || matName.includes('rubber') || matName.includes('carbon') ||
+            matName.includes('interior') || matName.includes('seat') || matName.includes('light') ||
+            matName.includes('lamp') || matName.includes('lens') || matName.includes('mirror') ||
+            matName.includes('chrome') || matName.includes('exhaust') || matName.includes('disc') ||
+            matName.includes('caliper') || matName.includes('brake') ||
+            meshName.includes('glass') || meshName.includes('window') || meshName.includes('windshield') ||
+            meshName.includes('tire') || meshName.includes('tyre') || meshName.includes('wheel') ||
+            meshName.includes('rim') || meshName.includes('rubber') || meshName.includes('light') ||
+            meshName.includes('lamp') || meshName.includes('caliper') || meshName.includes('disc') ||
+            meshName.includes('brake') || meshName.includes('interior') || meshName.includes('seat')
+          );
+
+          if (!isNonPaint) {
+            if (
+              matName.includes('paint') || matName.includes('carpaint') ||
+              matName.includes('body_paint') || matName.includes('paint_material') ||
+              matName.includes('coloured_material') || matName.includes('coloured_geo') ||
+              meshName.includes('paint_geo') || meshName.includes('coloured_geo') ||
+              meshName.includes('body_lod') || meshName.includes('kit1_paint')
+            ) {
+              isBodyPaint = true;
+            }
+          }
+
           switch (slug) {
             case 'ferrari-sf90-stradale':
               if (meshName === 'mesh_0') isBodyPaint = true;
@@ -318,22 +739,25 @@ window.CarModels3D = {
   /**
    * Dynamically updates the color of an existing vehicle group (both real model and procedural fallback).
    */
-  updateVehicleColor(vehicleGroup, colorHex, slug = '') {
+  updateVehicleColor(vehicleGroup, colorHex, slug = '', isCustom = true) {
     if (!vehicleGroup || !colorHex) return;
     const targetSlug = slug || (vehicleGroup.userData && vehicleGroup.userData.slug) || '';
+    const isF1 = targetSlug.startsWith('f1-') || targetSlug === 'mclaren-mp45';
+    const effectiveCustom = isF1 ? false : isCustom;
 
     // Update procedural paint material
     if (vehicleGroup.userData && vehicleGroup.userData.paintMaterial) {
-      vehicleGroup.userData.paintMaterial.color.set(colorHex);
+      const displayColor = isF1 ? (this.ORIGINAL_CAR_COLORS[targetSlug] || colorHex) : colorHex;
+      vehicleGroup.userData.paintMaterial.color.set(displayColor);
       vehicleGroup.userData.paintMaterial.needsUpdate = true;
     }
 
     // Update real model container meshes
     const realContainer = vehicleGroup.userData && vehicleGroup.userData.realModelContainer;
     if (realContainer) {
-      this.applyRealModelColor(realContainer, colorHex, targetSlug);
+      this.applyRealModelColor(realContainer, colorHex, targetSlug, effectiveCustom);
     } else {
-      this.applyRealModelColor(vehicleGroup, colorHex, targetSlug);
+      this.applyRealModelColor(vehicleGroup, colorHex, targetSlug, effectiveCustom);
     }
 
     if (vehicleGroup.userData) {
@@ -372,7 +796,7 @@ window.CarModels3D = {
 
     const onModelParsed = (rawObj) => {
       try {
-        const normalized = this.normalizeRealModel(rawObj, config.targetLength);
+        const normalized = this.normalizeRealModel(rawObj, config.targetLength, slug);
         this.cachedModels[slug] = normalized;
         this.loadingStatus[slug] = 'loaded';
 
@@ -496,7 +920,7 @@ window.CarModels3D = {
     const color = new THREE.Color(bodyColorHex);
 
     // Common realistic automotive PBR materials for procedural fallback
-    const paintMat = new THREE.MeshStandardMaterial({
+    const paintMat = new THREE.MeshPhysicalMaterial({
       color: color,
       roughness: 0.16,
       metalness: 0.78,
@@ -628,6 +1052,22 @@ window.CarModels3D = {
         this.buildBugattiChironSS(proceduralChassis, paintMat, carbonMat, glassMat, chromeMat, interiorMat);
         break;
 
+      case 'f1-2022-ferrari':
+      case 'f1-2022-redbull':
+      case 'f1-2022-mercedes':
+      case 'mclaren-mp45':
+      case 'f1-2025-concept':
+        wheelConfig.wheelbase = 3.60;
+        wheelConfig.trackwidth = 2.05;
+        wheelConfig.caliperColor = 0xd90429;
+        wheelConfig.rimColor = 0x111111;
+        wheelConfig.spokeCount = 10;
+        wheelConfig.tireRadius = 0.36;
+        wheelConfig.tireWidth = 0.38;
+        wheelConfig.isOpenWheel = true;
+        this.buildF1Chassis(proceduralChassis, paintMat, carbonMat, glassMat, chromeMat, interiorMat, slug);
+        break;
+
       case 'police-interceptor':
         wheelConfig.wheelbase = 3.05;
         wheelConfig.trackwidth = 1.95;
@@ -683,19 +1123,40 @@ window.CarModels3D = {
     // Swap in authentic real-life 3D model when available (Traffic cars strictly use lightweight procedural models)
     const applyRealModel = (normalized) => {
       if (!group || !realModelContainer || options.isTraffic) return;
-      while (realModelContainer.children.length > 0) {
-        realModelContainer.remove(realModelContainer.children[0]);
-      }
-      const realClone = this.cloneModel(normalized);
-      this.applyRealModelColor(realClone, bodyColorHex, slug);
-      realModelContainer.add(realClone);
+      try {
+        if (!normalized) return;
+        const realClone = this.cloneModel(normalized);
+        if (!realClone) return;
 
-      // Hide procedural chassis and procedural wheels since real model has authentic body & wheels
-      proceduralChassis.visible = false;
-      if (wheels && wheels.group) {
-        wheels.group.visible = false;
+        const isF1 = slug.startsWith('f1-') || slug === 'mclaren-mp45';
+        const isCustom = !isF1 && !!options.isCustomPaint;
+        if (isCustom) {
+          this.applyRealModelColor(realClone, bodyColorHex, slug, true);
+        } else {
+          this.restoreOriginalModelColors(realClone, slug);
+        }
+
+        while (realModelContainer.children.length > 0) {
+          realModelContainer.remove(realModelContainer.children[0]);
+        }
+        realModelContainer.add(realClone);
+
+        // Hide procedural chassis fallback only after real model is safely attached
+        proceduralChassis.visible = false;
+
+        // Authentic 3D models already have authentic, highly detailed 3D wheels, rims, and branded tires.
+        // Hide generic procedural wheels so they never clip through fenders, bodywork, or sidepods!
+        if (wheels && wheels.group) {
+          wheels.group.visible = false;
+        }
+        group.userData.isRealModelLoaded = true;
+      } catch (err) {
+        console.error(`[CarModels3D] Error applying real model for ${slug}:`, err);
+        proceduralChassis.visible = true;
+        if (wheels && wheels.group) {
+          wheels.group.visible = true;
+        }
       }
-      group.userData.isRealModelLoaded = true;
     };
 
     if (!options.isTraffic) {
@@ -1417,11 +1878,203 @@ window.CarModels3D = {
   },
 
   /* --------------------------------------------------------------------------
+     11. Formula 1 Grand Prix Aerodynamic Chassis (Scuderia Ferrari / Red Bull / Mercedes / McLaren)
+     -------------------------------------------------------------------------- */
+  buildF1Chassis(root, paint, carbon, glass, chrome, interior, slug = 'f1-2022-ferrari') {
+    const chassis = new THREE.Group();
+
+    // Livery accent colors based on F1 team
+    let liveryColor = 0xc00000; // Ferrari red
+    let secondaryColor = 0x111111; // Carbon black
+    let wingAccent = 0xc00000;
+    let driverHelmetColor = 0xffdf00;
+
+    if (slug === 'f1-2022-redbull') {
+      liveryColor = 0x0c1635; // Navy
+      secondaryColor = 0xffd600; // Yellow
+      wingAccent = 0xd90429; // Red Bull red
+      driverHelmetColor = 0xff8c00;
+    } else if (slug === 'f1-2022-mercedes') {
+      liveryColor = 0xc4c9cc; // Silver
+      secondaryColor = 0x00a19c; // Petronas teal
+      wingAccent = 0x00a19c;
+      driverHelmetColor = 0x6a0dad;
+    } else if (slug === 'mclaren-mp45') {
+      liveryColor = 0xffffff; // Classic white
+      secondaryColor = 0xff1100; // Marlboro red
+      wingAccent = 0xff1100;
+      driverHelmetColor = 0xffd700; // Senna yellow helmet
+    } else if (slug === 'f1-2025-concept') {
+      liveryColor = 0x11141c;
+      secondaryColor = 0x00f0ff;
+      wingAccent = 0xff0055;
+      driverHelmetColor = 0x00f0ff;
+    }
+
+    const teamPaint = new THREE.MeshPhysicalMaterial({
+      color: liveryColor,
+      roughness: 0.18,
+      metalness: 0.65,
+      clearcoat: 0.95
+    });
+
+    const accentMat = new THREE.MeshStandardMaterial({
+      color: secondaryColor,
+      roughness: 0.25,
+      metalness: 0.7
+    });
+
+    const wingMat = new THREE.MeshStandardMaterial({
+      color: wingAccent,
+      roughness: 0.3,
+      metalness: 0.5
+    });
+
+    // 1. Sleek Monocoque Tub (Main central body)
+    const tub = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.44, 2.10), teamPaint);
+    tub.position.set(0, 0.38, 0.25);
+    chassis.add(tub);
+
+    // 2. Tapered Needle Nose Cone
+    const noseGeo = new THREE.ConeGeometry(0.35, 1.70, 8);
+    const nose = new THREE.Mesh(noseGeo, teamPaint);
+    nose.rotation.x = -Math.PI / 2;
+    nose.position.set(0, 0.32, 1.95);
+    chassis.add(nose);
+
+    // Nose tip camera pods
+    const camPodL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.12), carbon);
+    camPodL.position.set(-0.24, 0.38, 2.1);
+    const camPodR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.12), carbon);
+    camPodR.position.set(0.24, 0.38, 2.1);
+    chassis.add(camPodL, camPodR);
+
+    // 3. Wide Front Aerodynamic Wing & Endplates (2.0m wide ground-effect assembly)
+    const frontWingMain = new THREE.Mesh(new THREE.BoxGeometry(2.00, 0.035, 0.48), carbon);
+    frontWingMain.position.set(0, 0.12, 2.45);
+    chassis.add(frontWingMain);
+
+    const frontWingFlap = new THREE.Mesh(new THREE.BoxGeometry(1.92, 0.025, 0.26), wingMat);
+    frontWingFlap.rotation.x = -0.12;
+    frontWingFlap.position.set(0, 0.18, 2.38);
+    chassis.add(frontWingFlap);
+
+    // Front Wing Endplates with outer curved diveplanes
+    const endplateL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.32, 0.65), accentMat);
+    endplateL.position.set(-1.00, 0.24, 2.45);
+    const endplateR = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.32, 0.65), accentMat);
+    endplateR.position.set(1.00, 0.24, 2.45);
+    chassis.add(endplateL, endplateR);
+
+    // 4. Sculpted Undercut Sidepods (Left & Right air cooling channels)
+    const sidepodGeo = new THREE.BoxGeometry(0.48, 0.36, 1.75);
+    const sidepodL = new THREE.Mesh(sidepodGeo, teamPaint);
+    sidepodL.position.set(-0.66, 0.32, -0.22);
+    const sidepodR = new THREE.Mesh(sidepodGeo, teamPaint);
+    sidepodR.position.set(0.66, 0.32, -0.22);
+    chassis.add(sidepodL, sidepodR);
+
+    // Radiator Intake Inlets
+    const intakeGeo = new THREE.BoxGeometry(0.38, 0.26, 0.06);
+    const intakeL = new THREE.Mesh(intakeGeo, carbon);
+    intakeL.position.set(-0.66, 0.34, 0.66);
+    const intakeR = new THREE.Mesh(intakeGeo, carbon);
+    intakeR.position.set(0.66, 0.34, 0.66);
+    chassis.add(intakeL, intakeR);
+
+    // Aerodynamic Bargeboards / Floor Edge Wings
+    const floorL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.02, 1.8), carbon);
+    floorL.position.set(-0.95, 0.08, -0.22);
+    const floorR = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.02, 1.8), carbon);
+    floorR.position.set(0.95, 0.08, -0.22);
+    chassis.add(floorL, floorR);
+
+    // 5. Overhead Engine Airbox Snorkel & Shark Fin Spine
+    const airbox = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.38, 0.65), teamPaint);
+    airbox.position.set(0, 0.82, -0.32);
+    chassis.add(airbox);
+
+    const airboxIntake = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.14, 0.12, 12), carbon);
+    airboxIntake.rotation.x = Math.PI / 2;
+    airboxIntake.position.set(0, 0.92, 0.0);
+    chassis.add(airboxIntake);
+
+    // Shark Fin Engine Spine
+    const sharkFin = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.46, 1.35), accentMat);
+    sharkFin.position.set(0, 0.82, -1.18);
+    chassis.add(sharkFin);
+
+    // 6. Halo Cockpit Safety Frame (Titanium curved protective hoop)
+    const haloMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.3, metalness: 0.8 });
+    const haloHoop = new THREE.Mesh(new THREE.TorusGeometry(0.32, 0.032, 8, 16, Math.PI * 1.1), haloMat);
+    haloHoop.rotation.x = Math.PI / 2;
+    haloHoop.rotation.z = Math.PI;
+    haloHoop.position.set(0, 0.72, 0.18);
+    chassis.add(haloHoop);
+
+    const haloPillar = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.34, 8), haloMat);
+    haloPillar.position.set(0, 0.58, 0.48);
+    chassis.add(haloPillar);
+
+    // Driver Helmet with Visor
+    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.14, 16, 12), new THREE.MeshStandardMaterial({ color: driverHelmetColor, roughness: 0.2 }));
+    helmet.position.set(0, 0.64, 0.08);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.06, 0.08), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+    visor.position.set(0, 0.64, 0.18);
+    chassis.add(helmet, visor);
+
+    // 7. High-Downforce Rear Wing Assembly (Twin Swan-Neck Pylons, DRS Mainplane, Endplates)
+    const pylonL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.62, 0.16), carbon);
+    pylonL.position.set(-0.18, 0.72, -2.15);
+    const pylonR = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.62, 0.16), carbon);
+    pylonR.position.set(0.18, 0.72, -2.15);
+    chassis.add(pylonL, pylonR);
+
+    // Rear Wing Mainplane
+    const rearWingMain = new THREE.Mesh(new THREE.BoxGeometry(1.42, 0.045, 0.42), carbon);
+    rearWingMain.position.set(0, 0.96, -2.18);
+    chassis.add(rearWingMain);
+
+    // Upper DRS Aerodynamic Flap (Rotates open in DRS zones!)
+    const drsFlap = new THREE.Mesh(new THREE.BoxGeometry(1.38, 0.03, 0.22), wingMat);
+    drsFlap.name = 'f1DrsFlap';
+    drsFlap.position.set(0, 1.05, -2.10);
+    chassis.add(drsFlap);
+
+    // Rear Wing Endplates
+    const rearEndplateL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.68, 0.58), accentMat);
+    rearEndplateL.position.set(-0.71, 0.88, -2.18);
+    const rearEndplateR = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.68, 0.58), accentMat);
+    rearEndplateR.position.set(0.71, 0.88, -2.18);
+    chassis.add(rearEndplateL, rearEndplateR);
+
+    // Lower Beam Wing
+    const beamWing = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.025, 0.24), carbon);
+    beamWing.position.set(0, 0.48, -2.16);
+    chassis.add(beamWing);
+
+    // 8. Rear Venturi Diffuser & FIA LED Rain Safety Light
+    const diffuser = new THREE.Mesh(new THREE.BoxGeometry(0.88, 0.22, 0.45), carbon);
+    diffuser.rotation.x = -0.35;
+    diffuser.position.set(0, 0.22, -2.05);
+    chassis.add(diffuser);
+
+    // Flashing Rain Light (Red LED diode)
+    const rainLightMat = new THREE.MeshBasicMaterial({ color: 0xff0022 });
+    const rainLight = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.07, 0.04), rainLightMat);
+    rainLight.name = 'f1RainLight';
+    rainLight.position.set(0, 0.32, -2.28);
+    chassis.add(rainLight);
+
+    root.add(chassis);
+  },
+
+  /* --------------------------------------------------------------------------
      Authentic Wheels Builder with Radiating Spokes & Drilled Rotors
      -------------------------------------------------------------------------- */
   attachWheels(root, wheelbase = 2.7, trackwidth = 1.85, config = {}) {
-    const tireRadius = 0.34;
-    const tireWidth = 0.28;
+    const tireRadius = config.tireRadius || 0.34;
+    const tireWidth = config.tireWidth || 0.28;
     const halfBase = wheelbase / 2;
     const halfTrack = trackwidth / 2;
 

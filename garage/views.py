@@ -80,6 +80,14 @@ class CarPaintAPIView(APIView):
         except (Car.DoesNotExist, PlayerCar.DoesNotExist):
             return Response({'error': 'Car not found in your garage'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Formula 1 race cars use official authentic liveries and cannot be repainted
+        is_f1 = (car.category == 'Formula 1' or 
+                 car.slug.startswith('f1-') or 
+                 car.slug == 'mclaren-mp45' or 
+                 (car.body_style and car.body_style.startswith('formula1')))
+        if is_f1:
+            return Response({'error': 'Formula 1 vehicles use official racing liveries and cannot be repainted.'}, status=status.HTTP_400_BAD_REQUEST)
+
         pc.color = color
         pc.save()
 
