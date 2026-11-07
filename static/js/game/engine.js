@@ -124,7 +124,9 @@ class RacingGameEngine {
 
     // Reset timings
     this.state = 'COUNTDOWN';
-    this.countdownTimer = 3.6;
+    this.countdownTimer = 3.0;
+    this.countdownStep = 3;
+    this.goTimer = 0.9;
     this.raceTotalTime = 0;
 
     // Start engine audio
@@ -133,7 +135,14 @@ class RacingGameEngine {
 
     // Show countdown display in UI
     const cdEl = document.getElementById('countdownOverlay');
+    const cdNum = document.getElementById('countdownNumber');
     if (cdEl) cdEl.style.display = 'flex';
+    if (cdNum) {
+      cdNum.textContent = '3';
+      cdNum.classList.remove('pulse-active');
+      void cdNum.offsetWidth;
+      cdNum.classList.add('pulse-active');
+    }
 
     this.lastTime = performance.now();
     requestAnimationFrame((t) => this.gameLoop(t));
@@ -239,32 +248,47 @@ class RacingGameEngine {
 
   update(dt) {
     if (this.state === 'COUNTDOWN') {
-      const prevTimer = Math.ceil(this.countdownTimer);
       this.countdownTimer -= dt;
-      const currentTimer = Math.ceil(this.countdownTimer);
-
+      const step = Math.max(1, Math.ceil(this.countdownTimer));
       const cdNum = document.getElementById('countdownNumber');
-      if (cdNum) {
-        if (this.countdownTimer > 0.6) {
-          cdNum.textContent = currentTimer;
-          if (currentTimer !== prevTimer) {
+
+      if (this.countdownTimer > 0) {
+        if (step !== this.countdownStep) {
+          this.countdownStep = step;
+          if (cdNum) {
+            cdNum.textContent = step;
+            cdNum.classList.remove('pulse-active');
+            void cdNum.offsetWidth;
+            cdNum.classList.add('pulse-active');
+          }
+          if (window.racingAudio && window.racingAudio.playCountdownBeep) {
             window.racingAudio.playCountdownBeep(false);
           }
-        } else {
+        }
+      } else {
+        this.state = 'RACING';
+        if (cdNum) {
           cdNum.textContent = 'GO!';
           cdNum.style.color = 'var(--accent-cyan)';
-          if (prevTimer === 1) {
-            window.racingAudio.playCountdownBeep(true);
-          }
+          cdNum.classList.remove('pulse-active');
+          void cdNum.offsetWidth;
+          cdNum.classList.add('pulse-active');
+        }
+        if (window.racingAudio && window.racingAudio.playCountdownBeep) {
+          window.racingAudio.playCountdownBeep(true);
         }
       }
-
-      if (this.countdownTimer <= 0) {
-        this.state = 'RACING';
-        const cdEl = document.getElementById('countdownOverlay');
-        if (cdEl) cdEl.style.display = 'none';
-      }
       return;
+    }
+
+    if (this.state === 'RACING') {
+      if (this.goTimer > 0) {
+        this.goTimer -= dt;
+        if (this.goTimer <= 0) {
+          const cdEl = document.getElementById('countdownOverlay');
+          if (cdEl) cdEl.style.display = 'none';
+        }
+      }
     }
 
     if (this.state === 'RACING') {

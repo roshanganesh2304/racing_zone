@@ -361,6 +361,8 @@ window.RacingTracks = {
 
 // Aliases for compatibility
 window.RacingTracks['neon-metropolis'] = window.RacingTracks['los-santos'];
+window.RacingTracks['neon_city'] = window.RacingTracks['los-santos'];
+window.RacingTracks['neon-city'] = window.RacingTracks['los-santos'];
 window.RacingTracks['coastal-riviera'] = window.RacingTracks['vice-city'];
 window.RacingTracks['monaco-city-circuit'] = window.RacingTracks['vice-city'];
 window.RacingTracks['tokyo-shuto-c1'] = window.RacingTracks['liberty-city'];

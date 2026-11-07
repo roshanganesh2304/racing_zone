@@ -31,17 +31,22 @@ class TrafficAndPoliceManager {
 
   updateWantedUI() {
     const container = document.getElementById('wantedStarsDisplay');
-    if (!container) return;
-    let starsHtml = '';
-    for (let i = 1; i <= 5; i++) {
-      starsHtml += i <= this.wantedLevel ? '<span style="color: #ffd600; text-shadow: 0 0 10px #ffb703;">★</span>' : '<span style="color: rgba(255,255,255,0.2);">★</span>';
+    if (container && this.lastRenderedStars !== this.wantedLevel) {
+      this.lastRenderedStars = this.wantedLevel;
+      let starsHtml = '';
+      for (let i = 1; i <= 5; i++) {
+        starsHtml += i <= this.wantedLevel ? '<span style="color: #ffd600; text-shadow: 0 0 10px #ffb703;">★</span>' : '<span style="color: rgba(255,255,255,0.2);">★</span>';
+      }
+      container.innerHTML = starsHtml;
     }
-    container.innerHTML = starsHtml;
 
     const escapeBar = document.getElementById('escapeMeterBar');
-    if (escapeBar) {
-      const pct = (this.escapeTimer / this.escapeRequiredTime) * 100;
-      escapeBar.style.width = `${pct}%`;
+    if (escapeBar && this.isPursuitActive) {
+      const pct = Math.round((this.escapeTimer / this.escapeRequiredTime) * 100);
+      if (pct !== this.lastRenderedEscapePct) {
+        this.lastRenderedEscapePct = pct;
+        escapeBar.style.width = `${pct}%`;
+      }
     }
   }
 
@@ -302,7 +307,9 @@ class TrafficAndPoliceManager {
       this.escapeTimer = Math.max(0, this.escapeTimer - dt * 2);
     }
 
-    this.updateWantedUI();
+    if (this.isPursuitActive) {
+      this.updateWantedUI();
+    }
   }
 }
 

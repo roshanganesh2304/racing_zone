@@ -71,8 +71,11 @@ window.CarRenderer = {
       this.renderNitroFlames(ctx, W, L);
     }
 
-    // Taillights & Headlights
-    this.renderLights(ctx, W, L, lightsOn, brakeActive);
+    // Taillights & Headlights (all suitable cars except F1)
+    const isF1 = slug.startsWith('f1-') || slug === 'mclaren-mp45' || slug === 'f1-2025-concept';
+    if (!isF1) {
+      this.renderLights(ctx, W, L, lightsOn, brakeActive);
+    }
 
     ctx.restore();
   },
@@ -531,13 +534,13 @@ window.CarRenderer = {
     ctx.restore();
   },
 
-  /** Realistic Headlights & Brake Lights Glow */
+  /** Realistic Headlights & Lit-up Taillights Glow */
   renderLights(ctx, W, L, lightsOn, brakeActive) {
     if (lightsOn) {
       // Headlights glow cones casting forward onto the asphalt
       ctx.save();
       const headGradLeft = ctx.createRadialGradient(-14, -L/2 - 10, 2, -14, -L/2 - 40, 50);
-      headGradLeft.addColorStop(0, 'rgba(230, 245, 255, 0.45)');
+      headGradLeft.addColorStop(0, 'rgba(230, 245, 255, 0.55)');
       headGradLeft.addColorStop(1, 'rgba(230, 245, 255, 0)');
 
       ctx.fillStyle = headGradLeft;
@@ -549,7 +552,7 @@ window.CarRenderer = {
       ctx.fill();
 
       const headGradRight = ctx.createRadialGradient(14, -L/2 - 10, 2, 14, -L/2 - 40, 50);
-      headGradRight.addColorStop(0, 'rgba(230, 245, 255, 0.45)');
+      headGradRight.addColorStop(0, 'rgba(230, 245, 255, 0.55)');
       headGradRight.addColorStop(1, 'rgba(230, 245, 255, 0)');
 
       ctx.fillStyle = headGradRight;
@@ -559,16 +562,20 @@ window.CarRenderer = {
       ctx.lineTo(0, -L/2 - 80);
       ctx.closePath();
       ctx.fill();
-      ctx.restore();
-    }
 
-    if (brakeActive) {
-      // Vivid bright red glow on braking
-      ctx.save();
-      ctx.shadowColor = '#ff003b';
-      ctx.shadowBlur = 15;
-      ctx.fillStyle = '#ff1a4b';
+      // Front Headlight lens glow dots
+      ctx.fillStyle = '#ffffff';
+      ctx.shadowColor = '#d0eeff';
+      ctx.shadowBlur = 8;
+      ctx.fillRect(-17, -L/2, 6, 3);
+      ctx.fillRect(11, -L/2, 6, 3);
+
+      // Lit-up Rear Taillights (active running lights; flares upon braking)
+      ctx.shadowColor = brakeActive ? '#ff003b' : '#cc0022';
+      ctx.shadowBlur = brakeActive ? 18 : 8;
+      ctx.fillStyle = brakeActive ? '#ff1a4b' : '#dd0828';
       ctx.fillRect(-W/2 + 6, L/2 - 3, W - 12, 4);
+
       ctx.restore();
     }
   }

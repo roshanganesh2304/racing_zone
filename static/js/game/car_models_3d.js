@@ -143,11 +143,14 @@ window.CarModels3D = {
     // 1. Hide watermarks, 2D UV guides, creator text, and camera/light helpers
     rawObj.traverse(child => {
       const name = (child.name || '').toLowerCase();
-      if (
+      if (child.isLight || child.isCamera) {
+        child.visible = false;
+      } else if (
         name.includes('creator') || name.includes('uv_map') ||
         name.includes('plane.001') || name.includes('watermark') ||
         name.includes('helper') || name.includes('camera') ||
-        name.includes('light')
+        name.includes('light_source') || name.includes('sun_light') ||
+        name.includes('lamp_omni') || name.includes('spot_light')
       ) {
         child.visible = false;
       }
@@ -277,6 +280,9 @@ window.CarModels3D = {
                 side: THREE.DoubleSide,
                 shadowSide: THREE.BackSide
               });
+              if (m.emissive) stdMat.emissive = m.emissive.clone();
+              if (m.emissiveMap) stdMat.emissiveMap = m.emissiveMap;
+              if (m.emissiveIntensity !== undefined) stdMat.emissiveIntensity = m.emissiveIntensity;
               if (!isTyre && !isRim && !isDisc && (m.transparent || m.opacity < 0.95)) {
                 stdMat.transparent = true;
                 stdMat.opacity = m.opacity;
@@ -319,7 +325,9 @@ window.CarModels3D = {
               stdMat.metalness = 0.85;
             }
 
-            if (isGlass) {
+            const isWindowGlass = meshName.includes('window') || meshName.includes('windshield') || meshName.includes('canopy');
+            const isLightLens = meshName.includes('light') || meshName.includes('lamp') || matName.includes('light') || matName.includes('lamp');
+            if (isGlass && isWindowGlass && !isLightLens) {
               stdMat.transparent = true;
               stdMat.opacity = 0.52;
               stdMat.roughness = 0.08;
@@ -618,7 +626,7 @@ window.CarModels3D = {
   applyRealModelColor(model, colorHex, slug = '', isCustom = false) {
     if (!model || !colorHex) return;
 
-    const isF1 = slug.startsWith('f1-') || slug === 'mclaren-mp45';
+    const isF1 = this.isF1Car(slug);
     const originalHex = this.ORIGINAL_CAR_COLORS[slug] || '';
     const isOriginal = isF1 || !isCustom || (originalHex && colorHex.toLowerCase() === originalHex.toLowerCase());
 
@@ -742,7 +750,7 @@ window.CarModels3D = {
   updateVehicleColor(vehicleGroup, colorHex, slug = '', isCustom = true) {
     if (!vehicleGroup || !colorHex) return;
     const targetSlug = slug || (vehicleGroup.userData && vehicleGroup.userData.slug) || '';
-    const isF1 = targetSlug.startsWith('f1-') || targetSlug === 'mclaren-mp45';
+    const isF1 = this.isF1Car(targetSlug);
     const effectiveCustom = isF1 ? false : isCustom;
 
     // Update procedural paint material
@@ -1128,12 +1136,20 @@ window.CarModels3D = {
         const realClone = this.cloneModel(normalized);
         if (!realClone) return;
 
-        const isF1 = slug.startsWith('f1-') || slug === 'mclaren-mp45';
+        const isF1 = this.isF1Car(slug);
         const isCustom = !isF1 && !!options.isCustomPaint;
         if (isCustom) {
           this.applyRealModelColor(realClone, bodyColorHex, slug, true);
         } else {
           this.restoreOriginalModelColors(realClone, slug);
+        }
+
+        if (!isF1) {
+          const rearMats = this.illuminateRealModelLights(realClone, slug);
+          if (rearMats && rearMats.length) {
+            group.userData.realModelRearMats = rearMats;
+          }
+          this.alignLightsToRealModel(group, realClone, slug);
         }
 
         while (realModelContainer.children.length > 0) {
@@ -1150,6 +1166,9 @@ window.CarModels3D = {
           wheels.group.visible = false;
         }
         group.userData.isRealModelLoaded = true;
+        if (options.isPlayer && typeof window !== 'undefined' && window.racingApp && window.racingApp.gameEngine && window.racingApp.gameEngine.updatePlayerMeshVisibility) {
+          window.racingApp.gameEngine.updatePlayerMeshVisibility();
+        }
       } catch (err) {
         console.error(`[CarModels3D] Error applying real model for ${slug}:`, err);
         proceduralChassis.visible = true;
@@ -1159,13 +1178,17 @@ window.CarModels3D = {
       }
     };
 
-    if (!options.isTraffic) {
+    if (!options.isTraffic && !options.isAI) {
       if (this.cachedModels[slug]) {
         applyRealModel(this.cachedModels[slug]);
       } else if (this.REAL_MODEL_CONFIGS[slug]) {
         this.loadRealModel(slug, (normalized) => {
           applyRealModel(normalized);
         });
+      }
+    } else if (options.isAI) {
+      if (this.cachedModels[slug]) {
+        applyRealModel(this.cachedModels[slug]);
       }
     }
 
@@ -2154,104 +2177,209 @@ window.CarModels3D = {
   /* --------------------------------------------------------------------------
      Authentic Real-Life Headlights, Signature Taillights, and Nitro Effects
      -------------------------------------------------------------------------- */
+  isF1Car(slug) {
+    if (!slug) return false;
+    return slug.startsWith('f1-') || slug === 'mclaren-mp45' || slug === 'f1-2025-concept';
+  },
+
+  getHeadlightGlowTexture() {
+    if (!this.headlightGlowTexture) {
+      if (typeof document === 'undefined') return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 60);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 1.0)');
+        grad.addColorStop(0.25, 'rgba(235, 248, 255, 0.85)');
+        grad.addColorStop(0.55, 'rgba(180, 220, 255, 0.35)');
+        grad.addColorStop(0.85, 'rgba(140, 200, 255, 0.08)');
+        grad.addColorStop(1, 'rgba(120, 180, 255, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(64, 64, 60, 0, Math.PI * 2);
+        ctx.fill();
+        this.headlightGlowTexture = new THREE.CanvasTexture(canvas);
+      }
+    }
+    return this.headlightGlowTexture;
+  },
+
+  getTaillightGlowTexture() {
+    if (!this.taillightGlowTexture) {
+      if (typeof document === 'undefined') return null;
+      const canvas = document.createElement('canvas');
+      canvas.width = 128;
+      canvas.height = 128;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        const grad = ctx.createRadialGradient(64, 64, 4, 64, 64, 60);
+        grad.addColorStop(0, 'rgba(255, 60, 80, 1.0)');
+        grad.addColorStop(0.25, 'rgba(255, 15, 45, 0.85)');
+        grad.addColorStop(0.55, 'rgba(230, 0, 35, 0.35)');
+        grad.addColorStop(0.85, 'rgba(200, 0, 25, 0.08)');
+        grad.addColorStop(1, 'rgba(180, 0, 20, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(64, 64, 60, 0, Math.PI * 2);
+        ctx.fill();
+        this.taillightGlowTexture = new THREE.CanvasTexture(canvas);
+      }
+    }
+    return this.taillightGlowTexture;
+  },
+
+  illuminateRealModelLights(model, slug) {
+    if (!model || this.isF1Car(slug)) return [];
+
+    const rearLightMats = [];
+
+    model.traverse(child => {
+      if (child.isMesh && child.material) {
+        const meshName = (child.name || '').toLowerCase();
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+
+        mats.forEach(m => {
+          if (!m) return;
+          const matName = (m.name || '').toLowerCase();
+          const texName = (m.map && m.map.name ? m.map.name : (m.map && m.map.image && m.map.image.src ? m.map.image.src : '')).toLowerCase();
+
+          const isLightMat = matName.includes('light') || matName.includes('lamp') ||
+                             matName.includes('lens') || matName.includes('emissive') ||
+                             matName.includes('headlight') || matName.includes('taillight') ||
+                             matName.includes('brakelight') || matName.includes('turnsignal') ||
+                             matName.includes('glass11') || matName.includes('glass_red') ||
+                             /^l[1-3]mtl/.test(matName) || /^r[1-8]mtl/.test(matName) ||
+                             matName.includes('material.001') || matName.includes('meshesbmwheadlights');
+
+          const isLightMesh = meshName.includes('light') || meshName.includes('lamp') ||
+                              meshName.includes('headlight') || meshName.includes('taillight') ||
+                              meshName.includes('brakelight') || meshName.includes('turnsignal') ||
+                              meshName.includes('lens') || meshName.includes('head_') ||
+                              meshName.includes('tail_') || meshName.includes('rear_light') ||
+                              meshName.includes('1990_mercedes_190_evo2_lights');
+
+          const isLightTex = texName.includes('light') || texName.includes('lamp') ||
+                             texName.includes('emissive') || texName.includes('lens');
+
+          if (isLightMat || isLightMesh || isLightTex) {
+            const isRear = matName.includes('tail') || matName.includes('rear') ||
+                           matName.includes('brake') || matName.includes('back') ||
+                           matName.includes('glass_red') || /^r[1-8]mtl/.test(matName) ||
+                           meshName.includes('tail') || meshName.includes('rear') ||
+                           meshName.includes('brake') || meshName.includes('back');
+
+            if (isRear) {
+              m.emissive = new THREE.Color(0xff0025);
+              m.emissiveIntensity = 2.4;
+              if (m.color) m.color.setHex(0xff1133);
+              if (!rearLightMats.includes(m)) rearLightMats.push(m);
+            } else {
+              m.emissive = new THREE.Color(0xf0f7ff);
+              m.emissiveIntensity = 2.2;
+              if (m.color) m.color.setHex(0xffffff);
+            }
+          }
+        });
+      }
+    });
+
+    return rearLightMats;
+  },
+
+  // Authentic 3D car model light transforms (measured directly from authentic CAD meshes)
+  CAR_LIGHT_TRANSFORMS: {
+    'porsche-911-gt3-rs': {
+      headlight: { x: 0.68, y: 0.68, z: 1.88, rotX: -0.22, rotY: 0.18, rotZ: 0.08, size: 0.22 },
+      taillight: { x: 0.68, y: 0.81, z: -2.14, rotX: 0.08, rotY: 0.06, rotZ: 0.0, size: 0.20, isLightbar: true, width: 1.62, height: 0.032 }
+    },
+    'bugatti-chiron-ss': {
+      headlight: { x: 0.70, y: 0.60, z: 1.92, rotX: -0.16, rotY: 0.22, rotZ: 0.06, size: 0.22 },
+      taillight: { x: 0.72, y: 0.70, z: -2.16, rotX: 0.06, rotY: 0.04, rotZ: 0.0, size: 0.20, isLightbar: true, width: 1.68, height: 0.030 }
+    },
+    'lamborghini-huracan-sto': {
+      headlight: { x: 0.72, y: 0.57, z: 1.78, rotX: -0.28, rotY: 0.26, rotZ: -0.10, size: 0.22 },
+      taillight: { x: 0.64, y: 0.70, z: -2.00, rotX: 0.12, rotY: -0.14, rotZ: -0.12, size: 0.20 }
+    },
+    'mclaren-765lt': {
+      headlight: { x: 0.74, y: 0.55, z: 1.78, rotX: -0.24, rotY: 0.24, rotZ: -0.14, size: 0.22 },
+      taillight: { x: 0.66, y: 0.62, z: -2.04, rotX: 0.10, rotY: -0.10, rotZ: 0.04, size: 0.20 }
+    },
+    'nissan-gtr-nismo': {
+      headlight: { x: 0.72, y: 0.64, z: 1.88, rotX: -0.18, rotY: 0.20, rotZ: 0.06, size: 0.22 },
+      taillight: { x: 0.65, y: 0.89, z: -2.10, rotX: 0.06, rotY: -0.06, rotZ: 0.0, size: 0.20, isAfterburner: true, innerX: 0.38 }
+    },
+    'bmw-m3-competition': {
+      headlight: { x: 0.65, y: 0.66, z: 2.08, rotX: -0.15, rotY: 0.16, rotZ: 0.04, size: 0.22 },
+      taillight: { x: 0.64, y: 0.88, z: -2.10, rotX: 0.08, rotY: -0.08, rotZ: 0.0, size: 0.20 }
+    },
+    'bmw-m5-e39': {
+      headlight: { x: 0.58, y: 0.58, z: 2.18, rotX: -0.10, rotY: 0.12, rotZ: 0.0, size: 0.20 },
+      taillight: { x: 0.59, y: 0.81, z: -2.21, rotX: 0.06, rotY: -0.04, rotZ: 0.0, size: 0.20 }
+    },
+    'nissan-skyline-r34': {
+      headlight: { x: 0.65, y: 0.66, z: 2.15, rotX: -0.14, rotY: 0.14, rotZ: 0.02, size: 0.20 },
+      taillight: { x: 0.62, y: 0.72, z: -2.18, rotX: 0.05, rotY: -0.05, rotZ: 0.0, size: 0.20, isAfterburner: true, innerX: 0.38 }
+    },
+    'mercedes-190e-evo2': {
+      headlight: { x: 0.56, y: 0.66, z: 2.14, rotX: -0.06, rotY: 0.08, rotZ: 0.0, size: 0.22 },
+      taillight: { x: 0.50, y: 0.73, z: -2.24, rotX: 0.04, rotY: -0.04, rotZ: 0.0, size: 0.20 }
+    },
+    'ferrari-sf90-stradale': {
+      headlight: { x: 0.68, y: 0.58, z: 1.95, rotX: -0.22, rotY: 0.22, rotZ: -0.08, size: 0.22 },
+      taillight: { x: 0.64, y: 0.68, z: -2.12, rotX: 0.08, rotY: -0.08, rotZ: 0.0, size: 0.20 }
+    },
+    'default': {
+      headlight: { x: 0.65, y: 0.58, z: 2.20, rotX: -0.12, rotY: 0.14, rotZ: 0.0, size: 0.22 },
+      taillight: { x: 0.64, y: 0.70, z: -2.22, rotX: 0.06, rotY: -0.06, rotZ: 0.0, size: 0.20 }
+    }
+  },
+
+  alignLightsToRealModel(root, realModel, slug) {
+    if (!root || !realModel || this.isF1Car(slug)) return;
+    const lightsGroup = root.userData && root.userData.lightsGroup;
+    if (!lightsGroup) return;
+
+    const cfg = this.CAR_LIGHT_TRANSFORMS[slug] || this.CAR_LIGHT_TRANSFORMS['default'];
+    if (!cfg) return;
+
+    // Reposition player SpotLights directly to the 3D model headlight coordinates
+    if (root.userData.headlights && root.userData.headlights.length >= 2) {
+      const spotL = root.userData.headlights[0];
+      const spotR = root.userData.headlights[1];
+      if (spotL && spotR) {
+        spotL.position.set(-cfg.headlight.x, cfg.headlight.y, cfg.headlight.z);
+        spotR.position.set(cfg.headlight.x, cfg.headlight.y, cfg.headlight.z);
+      }
+    }
+
+    // Reposition ruby brake glow flush to rear fascia
+    if (root.userData.brakeGlow) {
+      root.userData.brakeGlow.position.set(0, cfg.taillight.y, cfg.taillight.z - 0.15);
+    }
+
+    // Reposition and orient optical surface flares to align flush with 3D model light lenses
+    if (lightsGroup.userData && lightsGroup.userData.headlightFlares) {
+      lightsGroup.userData.headlightFlares.forEach(item => {
+        const side = item.side;
+        item.mesh.position.set(side * cfg.headlight.x, cfg.headlight.y, cfg.headlight.z + 0.012);
+        item.mesh.rotation.set(cfg.headlight.rotX, side * cfg.headlight.rotY, side * cfg.headlight.rotZ);
+      });
+    }
+
+    if (lightsGroup.userData && lightsGroup.userData.tailFlares) {
+      lightsGroup.userData.tailFlares.forEach(item => {
+        const side = item.side;
+        const posX = side === 0 ? 0 : side * cfg.taillight.x;
+        item.mesh.position.set(posX, cfg.taillight.y, cfg.taillight.z - 0.012);
+        item.mesh.rotation.set(cfg.taillight.rotX, Math.PI + side * cfg.taillight.rotY, side * cfg.taillight.rotZ);
+      });
+    }
+  },
+
   attachLights(root, slug, options = {}) {
-    const xenonMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    const tailMat = new THREE.MeshBasicMaterial({ color: 0xff0033 });
-
-    // Decorative headlight & taillight geometry attached to procedural fallback only
-    const decoParent = (root.userData && root.userData.proceduralChassis) || root;
-
-    // 1. Decorative Headlights for Procedural Fallback
-    if (slug === 'porsche-911-gt3-rs') {
-      for (let side of [-1, 1]) {
-        const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 16), xenonMat);
-        pod.rotation.x = Math.PI / 2;
-        pod.position.set(side * 0.65, 0.62, 2.12);
-        decoParent.add(pod);
-      }
-    } else if (slug === 'bugatti-chiron-ss') {
-      for (let side of [-1, 1]) {
-        for (let i = 0; i < 4; i++) {
-          const eye = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.04), xenonMat);
-          eye.position.set(side * (0.50 + i * 0.08), 0.52, 2.38);
-          decoParent.add(eye);
-        }
-      }
-    } else if (slug === 'bmw-m5-e39') {
-      for (let side of [-1, 1]) {
-        for (let eye of [-0.08, 0.08]) {
-          const halo = new THREE.Mesh(new THREE.TorusGeometry(0.065, 0.015, 8, 16), xenonMat);
-          halo.position.set(side * 0.62 + eye, 0.52, 2.38);
-          decoParent.add(halo);
-        }
-      }
-    } else {
-      const headL = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.09, 0.05), xenonMat);
-      headL.position.set(-0.65, 0.54, 2.31);
-      const headR = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.09, 0.05), xenonMat);
-      headR.position.set(0.65, 0.54, 2.31);
-      decoParent.add(headL, headR);
-    }
-
-    // 2. High-Performance Front Xenon Projector SpotLights (Cast illumination on track)
-    if (options.isPlayer) {
-      const spotL = new THREE.SpotLight(0xf2f8ff, 3.8, 85, Math.PI / 4.5, 0.45, 1.4);
-      spotL.position.set(-0.65, 0.58, 2.25);
-      spotL.target.position.set(-0.65, 0.05, 35);
-      root.add(spotL, spotL.target);
-
-      const spotR = new THREE.SpotLight(0xf2f8ff, 3.8, 85, Math.PI / 4.5, 0.45, 1.4);
-      spotR.position.set(0.65, 0.58, 2.25);
-      spotR.target.position.set(0.65, 0.05, 35);
-      root.add(spotR, spotR.target);
-
-      root.userData.headlights = [spotL, spotR];
-    }
-
-    // 3. Decorative Taillights for Procedural Fallback
-    const brakeMeshes = [];
-
-    if (slug === 'nissan-skyline-r34' || slug === 'nissan-gtr-nismo') {
-      for (let side of [-1, 1]) {
-        const outerRing = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.025, 8, 20), tailMat);
-        outerRing.position.set(side * 0.66, 0.60, -2.32);
-        const innerRing = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.025, 8, 20), tailMat);
-        innerRing.position.set(side * 0.40, 0.60, -2.32);
-        decoParent.add(outerRing, innerRing);
-        brakeMeshes.push(outerRing, innerRing);
-      }
-    } else if (slug === 'porsche-911-gt3-rs' || slug === 'bugatti-chiron-ss') {
-      const lightbar = new THREE.Mesh(new THREE.BoxGeometry(1.68, 0.04, 0.04), tailMat);
-      lightbar.position.set(0, 0.68, -2.26);
-      decoParent.add(lightbar);
-      brakeMeshes.push(lightbar);
-    } else if (slug === 'ferrari-sf90-stradale') {
-      for (let side of [-1, 1]) {
-        const ring1 = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 0.04), tailMat);
-        ring1.position.set(side * 0.68, 0.64, -2.35);
-        const ring2 = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 0.04), tailMat);
-        ring2.position.set(side * 0.46, 0.64, -2.35);
-        decoParent.add(ring1, ring2);
-        brakeMeshes.push(ring1, ring2);
-      }
-    } else {
-      const tailL = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.08, 0.04), tailMat);
-      tailL.position.set(-0.64, 0.60, -2.32);
-      const tailR = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.08, 0.04), tailMat);
-      tailR.position.set(0.64, 0.60, -2.32);
-      decoParent.add(tailL, tailR);
-      brakeMeshes.push(tailL, tailR);
-    }
-
-    // 4. Dynamic Rear Brake Glow (Only player vehicle gets dynamic light; AI and traffic use emissive materials)
-    let brakeGlow = null;
-    if (options.isPlayer) {
-      brakeGlow = new THREE.PointLight(0xff1122, 0.75, 8, 2);
-      brakeGlow.position.set(0, 0.62, -2.4);
-      root.add(brakeGlow);
-    }
-
-    // 5. 3D Nitro Exhaust Flame Cones
+    // 3D Nitro Exhaust Flame Cones (standard across all cars)
     const flameGeo = new THREE.ConeGeometry(0.12, 0.90, 8);
     flameGeo.rotateX(-Math.PI / 2);
     const flameMat = new THREE.MeshBasicMaterial({ color: 0x00f0ff, transparent: true, opacity: 0.92 });
@@ -2263,9 +2391,365 @@ window.CarModels3D = {
     flameR.visible = false;
     root.add(flameL, flameR);
 
-    root.userData.brakeLights = brakeGlow ? [brakeGlow, ...brakeMeshes] : [...brakeMeshes];
+    // FORMULA 1 VEHICLES: Real-life F1 cars have NO headlights or street taillights!
+    if (this.isF1Car(slug)) {
+      root.userData.isF1 = true;
+      root.userData.headlights = [];
+      root.userData.brakeLights = [];
+      root.userData.brakeGlow = null;
+      root.userData.brakeMat = null;
+      root.userData.nitroFlames = [flameL, flameR];
+      return;
+    }
+
+    // ALL OTHER SUITABLE VEHICLES: Authentic Lit-Up Xenon/LED Headlights & Ruby Red Signature Taillights!
+    root.userData.isF1 = false;
+    const lightsGroup = new THREE.Group();
+    lightsGroup.name = 'vehicleLightsContainer';
+    root.add(lightsGroup);
+
+    // Procedural chassis parent for procedural light geometry (auto-hides when authentic 3D model loads)
+    const proceduralChassis = (root.userData && root.userData.proceduralChassis) || lightsGroup;
+
+    // Load authentic transform configuration matching real 3D model coordinates & angles
+    const cfg = this.CAR_LIGHT_TRANSFORMS[slug] || this.CAR_LIGHT_TRANSFORMS['default'];
+
+    // Materials for Lit-Up Flush Lighting
+    const xenonMat = new THREE.MeshBasicMaterial({ color: 0xf5faff });
+    const drlMat = new THREE.MeshBasicMaterial({ color: 0xddf0ff });
+    const tailMat = new THREE.MeshBasicMaterial({ color: 0xff0828 });
+
+    const lensTexture = this.getHeadlightGlowTexture();
+    const lensFlareMat = lensTexture ? new THREE.MeshBasicMaterial({
+      map: lensTexture,
+      transparent: true,
+      opacity: 0.60,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    }) : new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.40 });
+
+    const tailTexture = this.getTaillightGlowTexture();
+    const tailFlareMat = tailTexture ? new THREE.MeshBasicMaterial({
+      map: tailTexture,
+      transparent: true,
+      opacity: 0.55,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    }) : new THREE.MeshBasicMaterial({ color: 0xff0828, transparent: true, opacity: 0.40 });
+
+    const headlightFlares = [];
+    const tailFlares = [];
+
+    // Optical bloom lens highlights - angled & positioned flush to authentic 3D model lenses
+    const makeHeadlightFlare = (x, y, z, rotX = 0, rotY = 0, rotZ = 0, size = 0.22, side = 1) => {
+      const flare = new THREE.Mesh(new THREE.PlaneGeometry(size, size), lensFlareMat);
+      flare.position.set(x, y, z + 0.012);
+      flare.rotation.set(rotX, rotY, rotZ);
+      lightsGroup.add(flare);
+      headlightFlares.push({ mesh: flare, side });
+      return flare;
+    };
+
+    const makeTailFlare = (x, y, z, rotX = 0, rotY = 0, rotZ = 0, size = 0.20, side = 1) => {
+      const flare = new THREE.Mesh(new THREE.PlaneGeometry(size, size), tailFlareMat);
+      flare.position.set(x, y, z - 0.012);
+      flare.rotation.set(rotX, Math.PI + rotY, rotZ);
+      lightsGroup.add(flare);
+      tailFlares.push({ mesh: flare, side });
+      return flare;
+    };
+
+    lightsGroup.userData = { headlightFlares, tailFlares };
+
+    // 1. FRONT HEADLIGHTS (Flush-fitted procedural bezels & lenses aligned to 3D model angles)
+    const hx = cfg.headlight.x;
+    const hy = cfg.headlight.y;
+    const hz = cfg.headlight.z;
+    const hrx = cfg.headlight.rotX;
+    const hry = cfg.headlight.rotY;
+    const hrz = cfg.headlight.rotZ;
+
+    if (slug === 'porsche-911-gt3-rs') {
+      // Porsche 911 GT3 RS: Sloping fender nacelles with swept 4-point Matrix LED DRL points
+      for (const side of [-1, 1]) {
+        const pod = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.015, 16), xenonMat);
+        pod.rotation.set(Math.PI / 2 + hrx, side * hry, side * hrz);
+        pod.position.set(side * hx, hy, hz);
+        proceduralChassis.add(pod);
+
+        // 4 Matrix LED DRL points
+        for (let a = 0; a < 4; a++) {
+          const ang = (a * Math.PI) / 2 + Math.PI / 4;
+          const pt = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, 0.012), drlMat);
+          pt.rotation.set(hrx, side * hry, side * hrz);
+          pt.position.set(side * hx + Math.cos(ang) * 0.065, hy + Math.sin(ang) * 0.065, hz + 0.005);
+          proceduralChassis.add(pt);
+        }
+        makeHeadlightFlare(side * hx, hy, hz, hrx, side * hry, side * hrz, cfg.headlight.size, side);
+      }
+    } else if (slug === 'bugatti-chiron-ss') {
+      // Bugatti Chiron: Quad-LED crystal projectors stepping along the front aerodynamic sweep
+      for (const side of [-1, 1]) {
+        for (let i = 0; i < 4; i++) {
+          const eyeX = side * (hx - 0.12 + i * 0.08);
+          const eyeZ = hz - i * 0.035;
+          const eyeY = hy + i * 0.010;
+          const eye = new THREE.Mesh(new THREE.BoxGeometry(0.065, 0.045, 0.015), xenonMat);
+          eye.rotation.set(hrx, side * hry, side * hrz);
+          eye.position.set(eyeX, eyeY, eyeZ);
+          proceduralChassis.add(eye);
+        }
+        makeHeadlightFlare(side * hx, hy, hz, hrx, side * hry, side * hrz, cfg.headlight.size, side);
+      }
+    } else if (slug === 'bmw-m5-e39') {
+      // BMW M5 E39: Iconic circular twin Angel Eye halo rings (aligned to 3D model nose)
+      for (const side of [-1, 1]) {
+        for (const eye of [-0.075, 0.075]) {
+          const haloX = side * hx + eye;
+          const halo = new THREE.Mesh(new THREE.TorusGeometry(0.060, 0.012, 8, 16), drlMat);
+          halo.rotation.set(hrx, side * hry, 0);
+          halo.position.set(haloX, hy, hz);
+          const bulb = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.012, 8), xenonMat);
+          bulb.rotation.set(Math.PI / 2 + hrx, side * hry, 0);
+          bulb.position.set(haloX, hy, hz);
+          proceduralChassis.add(halo, bulb);
+          makeHeadlightFlare(haloX, hy, hz, hrx, side * hry, 0, 0.18, side);
+        }
+      }
+    } else if (slug === 'bmw-m3-competition') {
+      // BMW M3 Competition: Dual L-shaped laser DRL blades aligned to kidney grille sweep
+      for (const side of [-1, 1]) {
+        const bladeH = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.020, 0.015), drlMat);
+        bladeH.rotation.set(hrx, side * hry, side * hrz);
+        bladeH.position.set(side * hx, hy - 0.025, hz);
+        const bladeV = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.065, 0.015), drlMat);
+        bladeV.rotation.set(hrx, side * hry, side * hrz);
+        bladeV.position.set(side * (hx + 0.06), hy + 0.010, hz);
+        const projector = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.015, 8), xenonMat);
+        projector.rotation.set(Math.PI / 2 + hrx, side * hry, side * hrz);
+        projector.position.set(side * hx, hy, hz);
+        proceduralChassis.add(bladeH, bladeV, projector);
+        makeHeadlightFlare(side * hx, hy, hz, hrx, side * hry, side * hrz, cfg.headlight.size, side);
+      }
+    } else if (slug === 'ferrari-sf90-stradale') {
+      // Ferrari SF90 Stradale: Minimalist horizontal LED slit light guides angled along shark nose
+      for (const side of [-1, 1]) {
+        const slit = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.025, 0.015), drlMat);
+        slit.position.set(side * hx, hy, hz);
+        slit.rotation.set(hrx, side * hry, side * hrz);
+        const proj = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.035, 0.015), xenonMat);
+        proj.position.set(side * (hx + 0.06), hy - 0.015, hz);
+        proj.rotation.set(hrx, side * hry, side * hrz);
+        proceduralChassis.add(slit, proj);
+        makeHeadlightFlare(side * hx, hy, hz, hrx, side * hry, side * hrz, cfg.headlight.size, side);
+      }
+    } else if (slug === 'lamborghini-huracan-sto') {
+      // Lamborghini Huracan STO: Angular Y-shaped signature LED DRL blades swept along wedge nose
+      for (const side of [-1, 1]) {
+        const yTop = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.025, 0.015), drlMat);
+        yTop.position.set(side * hx, hy + 0.010, hz);
+        yTop.rotation.set(hrx, side * hry, side * (hrz + 0.22));
+        const yBot = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.025, 0.015), drlMat);
+        yBot.position.set(side * (hx - 0.02), hy - 0.030, hz);
+        yBot.rotation.set(hrx, side * hry, side * (hrz - 0.22));
+        proceduralChassis.add(yTop, yBot);
+        makeHeadlightFlare(side * hx, hy, hz, hrx, side * hry, side * hrz, cfg.headlight.size, side);
+      }
+    } else if (slug === 'mclaren-765lt') {
+      // McLaren 765LT: Contoured teardrop crescent eye-socket blades slanted into intake nacelles
+      for (const side of [-1, 1]) {
+        const crescent = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.030, 0.015), drlMat);
+        crescent.position.set(side * hx, hy, hz);
+        crescent.rotation.set(hrx, side * hry, side * (hrz - 0.15));
+        const eye = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.015, 8), xenonMat);
+        eye.rotation.set(Math.PI / 2 + hrx, side * hry, side * hrz);
+        eye.position.set(side * (hx + 0.02), hy, hz);
+        proceduralChassis.add(crescent, eye);
+        makeHeadlightFlare(side * hx, hy, hz, hrx, side * hry, side * hrz, cfg.headlight.size, side);
+      }
+    } else if (slug === 'nissan-gtr-nismo') {
+      // Nissan GT-R Nismo: Lightning bolt / Z-pattern LED daytime running lights
+      for (const side of [-1, 1]) {
+        const zBar1 = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.025, 0.015), drlMat);
+        zBar1.position.set(side * hx, hy + 0.020, hz);
+        zBar1.rotation.set(hrx, side * hry, side * hrz);
+        const zBar2 = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.08, 0.015), drlMat);
+        zBar2.position.set(side * (hx + 0.07), hy - 0.020, hz);
+        zBar2.rotation.set(hrx, side * hry, side * hrz);
+        const proj = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.015, 8), xenonMat);
+        proj.rotation.set(Math.PI / 2 + hrx, side * hry, side * hrz);
+        proj.position.set(side * (hx - 0.02), hy - 0.020, hz);
+        proceduralChassis.add(zBar1, zBar2, proj);
+        makeHeadlightFlare(side * hx, hy, hz, hrx, side * hry, side * hrz, cfg.headlight.size, side);
+      }
+    } else if (slug === 'nissan-skyline-r34') {
+      // Nissan Skyline R34: Signature twin xenon projectors inside aerodynamic lenses
+      for (const side of [-1, 1]) {
+        for (const off of [-0.065, 0.065]) {
+          const bulb = new THREE.Mesh(new THREE.CylinderGeometry(0.040, 0.040, 0.015, 8), xenonMat);
+          bulb.rotation.set(Math.PI / 2 + hrx, side * hry, side * hrz);
+          bulb.position.set(side * hx + off, hy, hz);
+          proceduralChassis.add(bulb);
+          makeHeadlightFlare(side * hx + off, hy, hz, hrx, side * hry, side * hrz, 0.18, side);
+        }
+      }
+    } else if (slug === 'mercedes-190e-evo2') {
+      // Mercedes 190E Evo II: Classic wide rectangular crystal headlamp assemblies
+      for (const side of [-1, 1]) {
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.09, 0.015), xenonMat);
+        head.rotation.set(hrx, side * hry, 0);
+        head.position.set(side * hx, hy, hz);
+        const amber = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.08, 0.015), new THREE.MeshBasicMaterial({ color: 0xffaa00 }));
+        amber.rotation.set(hrx, side * hry, 0);
+        amber.position.set(side * (hx + 0.13), hy, hz - 0.010);
+        proceduralChassis.add(head, amber);
+        makeHeadlightFlare(side * hx, hy, hz, hrx, side * hry, 0, cfg.headlight.size, side);
+      }
+    } else {
+      // General Supercar / Police Interceptor Headlight Default
+      for (const side of [-1, 1]) {
+        const head = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.08, 0.015), xenonMat);
+        head.rotation.set(hrx, side * hry, 0);
+        head.position.set(side * hx, hy, hz);
+        proceduralChassis.add(head);
+        makeHeadlightFlare(side * hx, hy, hz, hrx, side * hry, 0, cfg.headlight.size, side);
+      }
+    }
+
+    // 2. High-Performance Front Road Illumination
+    // Dynamic Xenon SpotLights for player casting forward down the track
+    let spotL = null;
+    let spotR = null;
+    if (options.isPlayer) {
+      spotL = new THREE.SpotLight(0xf2f8ff, 3.8, 90, Math.PI / 4.5, 0.4, 1.4);
+      spotL.position.set(-hx, hy, hz);
+      spotL.target.position.set(-hx * 0.8, 0.05, 45);
+      lightsGroup.add(spotL, spotL.target);
+
+      spotR = new THREE.SpotLight(0xf2f8ff, 3.8, 90, Math.PI / 4.5, 0.4, 1.4);
+      spotR.position.set(hx, hy, hz);
+      spotR.target.position.set(hx * 0.8, 0.05, 45);
+      lightsGroup.add(spotR, spotR.target);
+    }
+
+    // Front soft ambient road fill point light (soft illumination on asphalt)
+    const frontFill = new THREE.PointLight(0xf0f7ff, 0.9, 12, 2);
+    frontFill.position.set(0, 0.48, hz + 0.30);
+    lightsGroup.add(frontFill);
+
+    // 3. REAR TAILLIGHTS (Flush-fitted signature lenses aligned to 3D model angles)
+    const brakeMeshes = [];
+    const tx = cfg.taillight.x;
+    const ty = cfg.taillight.y;
+    const tz = cfg.taillight.z;
+    const trx = cfg.taillight.rotX;
+    const try_ = cfg.taillight.rotY;
+    const trz = cfg.taillight.rotZ;
+
+    if (cfg.taillight.isLightbar) {
+      // Full-width continuous glowing LED razor lightbar (Porsche GT3 RS, Bugatti Chiron SS)
+      const lightbar = new THREE.Mesh(new THREE.BoxGeometry(cfg.taillight.width, cfg.taillight.height, 0.015), tailMat);
+      lightbar.rotation.set(trx, 0, 0);
+      lightbar.position.set(0, ty, tz);
+      proceduralChassis.add(lightbar);
+      brakeMeshes.push(lightbar);
+      makeTailFlare(-tx, ty, tz, trx, -try_, trz, cfg.taillight.size, -1);
+      makeTailFlare(0, ty, tz, trx, 0, 0, cfg.taillight.size * 0.85, 0);
+      makeTailFlare(tx, ty, tz, trx, try_, trz, cfg.taillight.size, 1);
+    } else if (cfg.taillight.isAfterburner) {
+      // Nissan Skyline / GT-R: Iconic 4-round afterburner dual glowing rings per side
+      for (const side of [-1, 1]) {
+        const outerRing = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.018, 8, 20), tailMat);
+        outerRing.rotation.set(trx, side * try_, 0);
+        outerRing.position.set(side * tx, ty, tz);
+        const innerRing = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.018, 8, 20), tailMat);
+        innerRing.rotation.set(trx, side * try_, 0);
+        innerRing.position.set(side * cfg.taillight.innerX, ty, tz);
+        proceduralChassis.add(outerRing, innerRing);
+        brakeMeshes.push(outerRing, innerRing);
+        makeTailFlare(side * tx, ty, tz, trx, side * try_, 0, cfg.taillight.size, side);
+        makeTailFlare(side * cfg.taillight.innerX, ty, tz, trx, side * try_, 0, cfg.taillight.size * 0.85, side);
+      }
+    } else if (slug === 'ferrari-sf90-stradale') {
+      // Ferrari SF90 Stradale: Dual squircle / rounded-rectangle twin LED rings per side
+      for (const side of [-1, 1]) {
+        const ring1 = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.055, 0.015), tailMat);
+        ring1.rotation.set(trx, side * try_, side * trz);
+        ring1.position.set(side * tx, ty, tz);
+        const ring2 = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.055, 0.015), tailMat);
+        ring2.rotation.set(trx, side * try_, side * trz);
+        ring2.position.set(side * (tx - 0.20), ty, tz);
+        proceduralChassis.add(ring1, ring2);
+        brakeMeshes.push(ring1, ring2);
+        makeTailFlare(side * tx, ty, tz, trx, side * try_, side * trz, cfg.taillight.size, side);
+        makeTailFlare(side * (tx - 0.20), ty, tz, trx, side * try_, side * trz, cfg.taillight.size, side);
+      }
+    } else if (slug === 'lamborghini-huracan-sto') {
+      // Lamborghini Huracan STO: Wide angular chevron LED blade taillights
+      for (const side of [-1, 1]) {
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.040, 0.015), tailMat);
+        blade.position.set(side * tx, ty, tz);
+        blade.rotation.set(trx, side * try_, side * trz);
+        proceduralChassis.add(blade);
+        brakeMeshes.push(blade);
+        makeTailFlare(side * tx, ty, tz, trx, side * try_, side * trz, cfg.taillight.size, side);
+      }
+    } else if (slug === 'mclaren-765lt') {
+      // McLaren 765LT: Curved laser LED light ribbon wrapping above quad exhausts
+      for (const side of [-1, 1]) {
+        const ribbon = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.030, 0.015), tailMat);
+        ribbon.position.set(side * tx, ty, tz);
+        ribbon.rotation.set(trx, side * try_, side * trz);
+        proceduralChassis.add(ribbon);
+        brakeMeshes.push(ribbon);
+        makeTailFlare(side * tx, ty, tz, trx, side * try_, side * trz, cfg.taillight.size, side);
+      }
+    } else if (slug === 'bmw-m3-competition' || slug === 'bmw-m5-e39') {
+      // BMW M3 & M5: Sculpted L-shaped 3D LED taillight clusters
+      for (const side of [-1, 1]) {
+        const barH = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.045, 0.015), tailMat);
+        barH.rotation.set(trx, side * try_, 0);
+        barH.position.set(side * tx, ty - 0.020, tz);
+        const barV = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.085, 0.015), tailMat);
+        barV.rotation.set(trx, side * try_, 0);
+        barV.position.set(side * (tx + 0.11), ty + 0.020, tz);
+        proceduralChassis.add(barH, barV);
+        brakeMeshes.push(barH, barV);
+        makeTailFlare(side * tx, ty, tz, trx, side * try_, 0, cfg.taillight.size, side);
+      }
+    } else if (slug === 'mercedes-190e-evo2') {
+      // Mercedes 190E Evo II: Classic ribbed rectangular taillamp clusters
+      for (const side of [-1, 1]) {
+        const lamp = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.08, 0.015), tailMat);
+        lamp.rotation.set(trx, side * try_, 0);
+        lamp.position.set(side * tx, ty, tz);
+        proceduralChassis.add(lamp);
+        brakeMeshes.push(lamp);
+        makeTailFlare(side * tx, ty, tz, trx, side * try_, 0, cfg.taillight.size, side);
+      }
+    } else {
+      // General Supercar Taillight Default
+      for (const side of [-1, 1]) {
+        const tail = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.07, 0.015), tailMat);
+        tail.rotation.set(trx, side * try_, 0);
+        tail.position.set(side * tx, ty, tz);
+        proceduralChassis.add(tail);
+        brakeMeshes.push(tail);
+        makeTailFlare(side * tx, ty, tz, trx, side * try_, 0, cfg.taillight.size, side);
+      }
+    }
+
+    // 4. Rear Ruby Red Ground Glow (active by default, flares upon braking)
+    const brakeGlow = new THREE.PointLight(0xff0025, 1.1, 7.5, 2);
+    brakeGlow.position.set(0, ty, tz - 0.15);
+    lightsGroup.add(brakeGlow);
+
+    root.userData.lightsGroup = lightsGroup;
+    root.userData.headlights = spotL && spotR ? [spotL, spotR] : [];
+    root.userData.brakeLights = [brakeGlow, ...brakeMeshes];
     root.userData.brakeGlow = brakeGlow;
     root.userData.brakeMat = tailMat;
     root.userData.nitroFlames = [flameL, flameR];
   }
 };
+

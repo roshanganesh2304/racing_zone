@@ -16,7 +16,7 @@
     rel="stylesheet">
 
   <!-- Stylesheet -->
-  <link rel="stylesheet" href="/static/css/styles.css">
+  <link rel="stylesheet" href="/static/css/styles.css?v=20261105_tach_pos_below">
 </head>
 
 <body>
@@ -68,6 +68,7 @@
         <li><a class="nav-link active" data-nav="home">Home</a></li>
         <li><a class="nav-link" data-nav="tracks">Tracks</a></li>
         <li><a class="nav-link" data-nav="garage">Garage</a></li>
+        <li><a class="nav-link" data-nav="multiplayer" style="color: var(--accent-cyan); font-weight: 700;">Multiplayer 🌐</a></li>
         <li><a class="nav-link" data-nav="leaderboard">Leaderboard</a></li>
         <li><a class="nav-link" data-nav="career">Career</a></li>
       </ul>
@@ -116,6 +117,9 @@
             </button>
             <button class="btn btn-secondary" data-nav="garage">
               <span>🏎️</span> Enter Garage
+            </button>
+            <button class="btn btn-secondary" data-nav="multiplayer" style="border-color: var(--accent-cyan); color: var(--accent-cyan);">
+              <span>🌐</span> Multiplayer
             </button>
           </div>
         </div>
@@ -488,11 +492,28 @@
             <div class="hud-sub-top-bar">
               <!-- Left Side: Race Rank, Lap Progress, Radio, Time, Camera -->
               <div class="hud-quick-stats-row">
-                <div class="hud-panel hud-position-box">
-                  <span class="hud-label">Position</span>
-                  <div style="display: flex; align-items: baseline; gap: 0.2rem;">
-                    <span class="hud-position-val" id="hudPositionVal">1</span>
-                    <span class="hud-position-total">/ 4</span>
+                <!-- Position Column: Position indicator with Tachometer (Speedo meter) directly beneath -->
+                <div class="hud-position-column">
+                  <div class="hud-panel hud-position-box">
+                    <span class="hud-label">Position</span>
+                    <div style="display: flex; align-items: baseline; gap: 0.2rem;">
+                      <span class="hud-position-val" id="hudPositionVal">1</span>
+                      <span class="hud-position-total">/ 4</span>
+                    </div>
+                  </div>
+
+                  <!-- Tachometer (Speedo meter) below Position indicator -->
+                  <div class="hud-tachometer-card" id="hudTachometerCard">
+                    <div class="analog-speedo">
+                      <canvas id="speedoCanvas" width="130" height="130" class="speedo-canvas"></canvas>
+                    </div>
+                    <div class="hud-panel digital-speed-readout">
+                      <span class="digital-speed-val" id="digitalSpeedVal">0</span>
+                      <div style="display: flex; justify-content: space-between; align-items: center; gap: 0.4rem;">
+                        <span class="digital-speed-unit">MPH</span>
+                        <span class="hud-gear-indicator" id="hudGearVal">G1</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -554,12 +575,19 @@
                   </div>
                 </div>
 
-                <!-- Camera View Badge (Chase / Interior View [C]) -->
-                <div class="hud-panel hud-clickable-btn" id="hudCameraBtn" title="Switch Camera View: Chase / Cockpit Interior / Hood [C]"
+                <!-- Camera View Badge (Chase / Hood / Interior / Aerial [C]) -->
+                <div class="hud-panel hud-clickable-btn" id="hudCameraBtn" title="Switch Camera View: Chase / Hood / Cockpit Interior / Aerial [C]"
                   onclick="racingApp.gameEngine && racingApp.gameEngine.toggleCameraMode()">
                   <span class="hud-label">View [C]</span>
                   <div id="cameraModeBadge" style="font-weight: 800; color: var(--accent-cyan); font-size: 0.85rem;">
                     🏎️ CHASE</div>
+                </div>
+
+                <!-- Respawn / Recover to Track Button -->
+                <div class="hud-panel hud-clickable-btn hud-respawn-btn" id="hudRespawnBtn" title="Reset / Recover Car to Track [F]"
+                  onclick="racingApp.gameEngine && racingApp.gameEngine.resetPlayerToTrack()">
+                  <span class="hud-label">Track [F]</span>
+                  <div style="font-weight: 800; color: #ffd600; font-size: 0.85rem;">🔄 RESPAWN</div>
                 </div>
 
                 <!-- Exit Race Button (Always accessible on Mobile & Desktop) -->
@@ -570,7 +598,7 @@
                 </div>
               </div>
 
-              <!-- Right Side: Event Mission Objectives (Matching the screen in the image) -->
+              <!-- Right Side: Event Mission Objectives -->
               <div class="hud-objectives-card" id="hudObjectivesCard">
                 <div class="hud-obj-header">
                   <span>EVENT MISSION OBJECTIVES</span>
@@ -613,7 +641,7 @@
           </div>
 
           <!-- Countdown 3..2..1..GO Overlay -->
-          <div class="countdown-overlay" id="countdownOverlay">
+          <div class="countdown-overlay" id="countdownOverlay" style="display: none;">
             <div class="countdown-number" id="countdownNumber">3</div>
           </div>
 
@@ -637,19 +665,8 @@
 
           <!-- Bottom HUD Cluster -->
           <div class="hud-bottom-bar">
-            <!-- Digital Speedometer & Tachometer -->
+            <!-- Nitro Cluster -->
             <div class="hud-speedometer-cluster">
-              <div class="analog-speedo">
-                <canvas id="speedoCanvas" width="140" height="140" class="speedo-canvas"></canvas>
-              </div>
-              <div class="hud-panel digital-speed-readout">
-                <span class="digital-speed-val" id="digitalSpeedVal">0</span>
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                  <span class="digital-speed-unit">MPH</span>
-                  <span class="hud-gear-indicator" id="hudGearVal">G1</span>
-                </div>
-              </div>
-
               <!-- Nitro Gauge -->
               <div class="hud-panel nitro-gauge-wrap">
                 <div
@@ -867,6 +884,182 @@
       </div>
     </section>
 
+    <!-- Screen 7: Real-Time Multiplayer -->
+    <section class="screen-view" id="screen-multiplayer">
+      <div class="section-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+        <div>
+          <div style="display: inline-flex; align-items: center; gap: 0.5rem; background: rgba(0, 240, 255, 0.1); border: 1px solid var(--border-active); border-radius: var(--radius-full); padding: 0.3rem 0.8rem; margin-bottom: 0.6rem; font-size: 0.8rem; font-weight: 700; color: var(--accent-cyan);">
+            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #00f59b; box-shadow: 0 0 8px #00f59b;"></span>
+            REAL-TIME MULTIPLAYER
+          </div>
+          <h2 class="section-title">Multiplayer Circuit</h2>
+          <p class="section-subtitle">Race live against real drivers over local Wi-Fi, LAN, or online.</p>
+        </div>
+        <div style="display: flex; align-items: center; gap: 0.8rem;">
+          <div class="coin-chip" id="mpConnectionBadge" style="background: rgba(18, 22, 32, 0.9); border: 1px solid var(--border-color); font-size: 0.85rem;">
+            <span id="mpStatusDot" style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ff2a5f;"></span>
+            <span id="mpStatusText">Connecting...</span>
+            <span id="mpPingVal" style="color: var(--accent-cyan); font-family: var(--font-mono); font-size: 0.75rem;">-- ms</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW A: Lobby Browser & Room Creation -->
+      <div id="mpBrowserView">
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+          
+          <!-- Quick Match Card -->
+          <div class="feature-card" style="border: 1px solid rgba(0, 240, 255, 0.3); background: linear-gradient(135deg, rgba(0, 240, 255, 0.08) 0%, rgba(18, 22, 32, 0.9) 100%);">
+            <div class="feature-icon" style="background: var(--accent-cyan-glow);">⚡</div>
+            <h3 class="feature-title">Quick Race Match</h3>
+            <p class="feature-desc">Jump straight into an open race room or auto-create a match for anyone to join.</p>
+            <button class="btn btn-primary" id="btnMpQuickMatch" style="width: 100%; margin-top: 1.2rem;">
+              <span>⚡</span> Quick Match
+            </button>
+          </div>
+
+          <!-- Create Custom Room Card -->
+          <div class="feature-card">
+            <div class="feature-icon" style="background: var(--accent-red-glow);">🏁</div>
+            <h3 class="feature-title">Create Private Room</h3>
+            <p class="feature-desc">Host a custom room and invite friends using your unique 4-letter Room Code.</p>
+            
+            <div style="margin-top: 1rem; display: flex; flex-direction: column; gap: 0.8rem;">
+              <div>
+                <label class="form-label" style="font-size: 0.8rem;">Circuit Track</label>
+                <select id="mpCreateTrackSelect" class="form-input" style="padding: 0.5rem 0.8rem; font-size: 0.9rem;">
+                  <option value="los-santos" selected>Los Santos Grand Highway</option>
+                  <option value="vice-city">Vice City Ocean Boulevard</option>
+                  <option value="liberty-city">Liberty City Star Junction</option>
+                  <option value="las-venturas">Las Venturas Strip Circuit</option>
+                  <option value="blaine-county">Blaine County Desert Canyon</option>
+                  <option value="monza-f1">Autodromo Monza (F1)</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="form-label" style="font-size: 0.8rem;">Laps Count</label>
+                <select id="mpCreateLapsSelect" class="form-input" style="padding: 0.5rem 0.8rem; font-size: 0.9rem;">
+                  <option value="1">1 Lap Sprint</option>
+                  <option value="2" selected>2 Laps Circuit</option>
+                  <option value="3">3 Laps Grand Prix</option>
+                  <option value="5">5 Laps Endurance</option>
+                </select>
+              </div>
+
+              <button class="btn btn-primary" id="btnMpCreateRoom" style="width: 100%; margin-top: 0.4rem;">
+                <span>➕</span> Create Room
+              </button>
+            </div>
+          </div>
+
+          <!-- Join by Code Card -->
+          <div class="feature-card">
+            <div class="feature-icon" style="background: var(--accent-gold-glow);">🔑</div>
+            <h3 class="feature-title">Join With Code</h3>
+            <p class="feature-desc">Enter the room code shared by your friend or opponent.</p>
+            
+            <div style="margin-top: 1.2rem;">
+              <label class="form-label" style="font-size: 0.8rem;">Room Code</label>
+              <div style="display: flex; gap: 0.6rem;">
+                <input type="text" id="mpJoinCodeInput" class="form-input" placeholder="e.g. RZ-9482" style="text-transform: uppercase; font-family: var(--font-mono); font-weight: 800; letter-spacing: 2px;">
+                <button class="btn btn-primary" id="btnMpJoinWithCode" style="white-space: nowrap; padding: 0 1.2rem;">
+                  Join
+                </button>
+              </div>
+              <div id="mpJoinError" style="color: var(--accent-red); font-size: 0.8rem; margin-top: 0.5rem; display: none;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Open Rooms Browser Section -->
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h3 style="font-size: 1.2rem; font-weight: 800; display: flex; align-items: center; gap: 0.5rem;">
+              <span>🌐</span> Active Open Rooms
+            </h3>
+            <button class="btn btn-secondary" id="btnMpRefreshRooms" style="font-size: 0.8rem; padding: 0.35rem 0.8rem;">
+              <span>🔄</span> Refresh
+            </button>
+          </div>
+
+          <div id="mpRoomsListContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+            <div style="color: var(--text-muted); font-size: 0.9rem; padding: 1rem 0;">No active rooms found. Click "Create Room" or "Quick Match" to start one!</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIEW B: Active Room Staging Lobby -->
+      <div id="mpLobbyView" style="display: none;">
+        <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.5rem;">
+          
+          <!-- Lobby Top Bar -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 1.2rem; margin-bottom: 1.5rem;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 0.8rem;">
+                <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">ROOM CODE:</span>
+                <span id="mpRoomCodeDisplay" style="font-family: var(--font-mono); font-size: 1.6rem; font-weight: 900; color: var(--accent-cyan); letter-spacing: 2px;">RZ-XXXX</span>
+                <button class="btn btn-secondary" id="btnMpCopyCode" style="padding: 0.3rem 0.7rem; font-size: 0.75rem;">
+                  📋 Copy
+                </button>
+              </div>
+              <div style="display: flex; gap: 1rem; margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">
+                <span>Circuit: <strong id="mpRoomTrackName" style="color: #fff;">Neon City</strong></span>
+                <span>•</span>
+                <span>Laps: <strong id="mpRoomLapsCount" style="color: #fff;">2</strong></span>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 0.8rem;">
+              <button class="btn btn-secondary" id="btnMpLeaveRoom" style="border-color: rgba(255, 42, 95, 0.4); color: var(--accent-red);">
+                <span>🚪</span> Leave Room
+              </button>
+            </div>
+          </div>
+
+          <!-- 4 Racers Grid -->
+          <h4 style="font-size: 0.9rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 1rem;">
+            GRID LINEUP (<span id="mpPlayerCount">1</span> / 4 RACERS)
+          </h4>
+          <div id="mpSlotsContainer" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+            <!-- Rendered dynamically -->
+          </div>
+
+          <!-- Quick Chat Bar -->
+          <div style="background: rgba(10, 14, 22, 0.6); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem; margin-bottom: 1.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+              <span style="font-size: 0.8rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Team Radio / Quick Chat</span>
+            </div>
+            <div id="mpChatBox" style="height: 70px; overflow-y: auto; font-size: 0.85rem; display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.8rem; padding: 0.4rem; background: rgba(0,0,0,0.25); border-radius: var(--radius-sm);">
+              <div style="color: var(--text-dim); font-style: italic;">Joined the room. Say hi!</div>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary mp-quick-chat-btn" data-msg="🏎️ Let's race!" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">🏎️ Let's race!</button>
+              <button class="btn btn-secondary mp-quick-chat-btn" data-msg="🔥 I am ready!" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">🔥 I am ready!</button>
+              <button class="btn btn-secondary mp-quick-chat-btn" data-msg="💨 Watch my smoke!" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">💨 Watch my smoke!</button>
+              <button class="btn btn-secondary mp-quick-chat-btn" data-msg="🏁 Good luck racers!" style="padding: 0.3rem 0.6rem; font-size: 0.75rem;">🏁 Good luck racers!</button>
+            </div>
+          </div>
+
+          <!-- Start Race / Ready Actions -->
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <button class="btn btn-secondary" id="btnMpToggleReady" style="font-size: 1rem; padding: 0.7rem 1.6rem;">
+                <span id="btnMpReadyIcon">⏳</span> <span id="btnMpReadyText">I Am Ready</span>
+              </button>
+            </div>
+            <div style="display: flex; align-items: center; gap: 1rem;">
+              <span id="mpHostHint" style="font-size: 0.85rem; color: var(--text-muted);">Waiting for all racers to be ready...</span>
+              <button class="btn btn-primary" id="btnMpStartRace" style="font-size: 1.1rem; padding: 0.7rem 2.2rem;" disabled>
+                <span>🏁</span> Launch Race!
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- Race Results Modal -->
@@ -964,18 +1157,19 @@
   <script src="/static/js/loaders/MTLLoader.js"></script>
   <script src="/static/js/loaders/OBJLoader.js"></script>
   <script src="/static/js/audio.js?v=20261105_f1_livery_locked"></script>
-  <script src="/static/js/game/car_models.js?v=20261105_f1_livery_locked"></script>
-  <script src="/static/js/game/car_models_3d.js?v=20261105_f1_livery_locked"></script>
-  <script src="/static/js/game/character_3d.js?v=20261105_f1_livery_locked"></script>
-  <script src="/static/js/game/world_3d.js?v=20261105_f1_livery_locked"></script>
-  <script src="/static/js/game/traffic_police_3d.js?v=20261105_f1_livery_locked"></script>
-  <script src="/static/js/game/tracks_data.js?v=20261105_f1_livery_locked"></script>
-  <script src="/static/js/game/physics.js?v=20261105_f1_livery_locked"></script>
-  <script src="/static/js/game/ai.js?v=20261105_f1_livery_locked"></script>
-  <script src="/static/js/game/engine_3d.js?v=20261105_f1_livery_locked"></script>
-  <script src="/static/js/game/engine.js?v=20261105_f1_livery_locked"></script>
-  <script src="/static/js/api.js?v=20261105_f1_livery_locked"></script>
-  <script src="/static/js/app.js?v=20261105_f1_livery_locked"></script>
+  <script src="/static/js/game/car_models.js?v=20261106_align_lights"></script>
+  <script src="/static/js/game/car_models_3d.js?v=20261107_fix_lag"></script>
+  <script src="/static/js/game/character_3d.js?v=20261107_fix_lag"></script>
+  <script src="/static/js/game/world_3d.js?v=20261107_fix_lag"></script>
+  <script src="/static/js/game/traffic_police_3d.js?v=20261107_fix_lag"></script>
+  <script src="/static/js/game/tracks_data.js?v=20261107_fix_lag"></script>
+  <script src="/static/js/game/physics.js?v=20261107_fix_lag"></script>
+  <script src="/static/js/game/ai.js?v=20261107_fix_lag"></script>
+  <script src="/static/js/game/multiplayer.js?v=20261107_fix_lag"></script>
+  <script src="/static/js/game/engine_3d.js?v=20261107_fix_lag"></script>
+  <script src="/static/js/game/engine.js?v=20261107_fix_lag"></script>
+  <script src="/static/js/api.js?v=20261107_fix_lag"></script>
+  <script src="/static/js/app.js?v=20261107_fix_lag"></script>
 </body>
 
 </html>

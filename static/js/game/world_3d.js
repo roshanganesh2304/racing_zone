@@ -26,21 +26,41 @@ class World3D {
 
   isNearTrack(x, z, trackDef, minDistance = 55) {
     if (this.denseTrackPoints && this.denseTrackPoints.length > 0) {
-      for (let i = 0; i < this.denseTrackPoints.length; i++) {
-        const p1 = this.denseTrackPoints[i];
-        const p2 = this.denseTrackPoints[(i + 1) % this.denseTrackPoints.length];
-        const dx = p2.x - p1.x;
-        const dz = p2.z - p1.z;
-        const l2 = dx * dx + dz * dz;
-        let dist;
-        if (l2 < 0.0001) {
-          dist = Math.hypot(x - p1.x, z - p1.z);
-        } else {
-          let t = ((x - p1.x) * dx + (z - p1.z) * dz) / l2;
-          t = Math.max(0, Math.min(1, t));
-          dist = Math.hypot(x - (p1.x + t * dx), z - (p1.z + t * dz));
+      const minD2 = minDistance * minDistance;
+      const pts = this.denseTrackPoints;
+      const len = pts.length;
+      const step = 4;
+
+      for (let i = 0; i < len; i += step) {
+        const p1 = pts[i];
+        const dx = x - p1.x;
+        const dz = z - p1.z;
+        if (dx * dx + dz * dz < minD2 * 2.5) {
+          const start = Math.max(0, i - step);
+          const end = Math.min(len, i + step + 1);
+          for (let j = start; j < end; j++) {
+            const pa = pts[j];
+            const pb = pts[(j + 1) % len];
+            const segDx = pb.x - pa.x;
+            const segDz = pb.z - pa.z;
+            const l2 = segDx * segDx + segDz * segDz;
+            let distSq;
+            if (l2 < 0.0001) {
+              const d1x = x - pa.x;
+              const d1z = z - pa.z;
+              distSq = d1x * d1x + d1z * d1z;
+            } else {
+              let t = ((x - pa.x) * segDx + (z - pa.z) * segDz) / l2;
+              t = Math.max(0, Math.min(1, t));
+              const px = pa.x + t * segDx;
+              const pz = pa.z + t * segDz;
+              const d2x = x - px;
+              const d2z = z - pz;
+              distSq = d2x * d2x + d2z * d2z;
+            }
+            if (distSq < minD2) return true;
+          }
         }
-        if (dist < minDistance) return true;
       }
       return false;
     }

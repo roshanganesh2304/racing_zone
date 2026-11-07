@@ -279,6 +279,8 @@ class RacingApp {
       this.loadCareerProfile();
     } else if (screenName === 'tracks') {
       this.renderTracksList();
+    } else if (screenName === 'multiplayer') {
+      this.initMultiplayerView();
     }
   }
 
@@ -1942,6 +1944,464 @@ class RacingApp {
         }
       });
     }
+  }
+
+  /* --------------------------------------------------------------------------
+     Multiplayer Circuit & Lobby Integration
+     -------------------------------------------------------------------------- */
+  initMultiplayerView() {
+    this.initMultiplayer();
+    const mp = window.racingMultiplayer;
+    if (mp) {
+      mp.connect().then(() => {
+        mp.requestRoomList();
+      }).catch(err => {
+        console.warn("Multiplayer connection error:", err);
+      });
+    }
+  }
+
+  initMultiplayer() {
+    if (this._mpInitialized) return;
+    this._mpInitialized = true;
+    const mp = window.racingMultiplayer;
+    if (!mp) return;
+
+    this.mpLocalReady = false;
+
+    // Connection events
+    mp.on('connectionChange', ({ connected }) => {
+      const dot = document.getElementById('mpStatusDot');
+      const txt = document.getElementById('mpStatusText');
+      if (dot) dot.style.background = connected ? '#00f59b' : '#ff2a5f';
+      if (txt) txt.textContent = connected ? 'Online Matchmaker' : 'Offline';
+    });
+
+    setInterval(() => {
+      const pingEl = document.getElementById('mpPingVal');
+      if (pingEl && mp.isConnected) {
+        pingEl.textContent = `${mp.ping} ms`;
+      }
+    }, 1500);
+
+    // Room events
+    mp.on('roomList', (rooms) => this.renderMpRoomsList(rooms));
+    mp.on('roomJoined', (data) => this.showMpRoomLobby(data));
+    mp.on('roomUpdated', (room) => this.updateMpRoomLobby(room));
+    mp.on('chat', (data) => this.appendMpChat(data));
+    mp.on('error', (err) => {
+      const errEl = document.getElementById('mpJoinError');
+      if (errEl) {
+        errEl.textContent = err.message || 'Error occurred';
+        errEl.style.display = 'block';
+        setTimeout(() => { errEl.style.display = 'none'; }, 4000);
+      }
+    });
+
+    // Start race countdown event
+    mp.on('countdown', (data) => {
+      this.launchMultiplayerRace(data);
+    });
+
+    // Race results event
+    mp.on('raceResults', (standings) => {
+      this.showMultiplayerResultsModal(standings);
+    });
+
+    // Bind UI Buttons
+    const btnQuickMatch = document.getElementById('btnMpQuickMatch');
+    if (btnQuickMatch) {
+      btnQuickMatch.addEventListener('click', () => this.handleMpQuickMatch());
+    }
+
+    const btnCreateRoom = document.getElementById('btnMpCreateRoom');
+    if (btnCreateRoom) {
+      btnCreateRoom.addEventListener('click', () => this.handleMpCreateRoom());
+    }
+
+    const btnJoinWithCode = document.getElementById('btnMpJoinWithCode');
+    if (btnJoinWithCode) {
+      btnJoinWithCode.addEventListener('click', () => this.handleMpJoinWithCode());
+    }
+
+    const btnRefresh = document.getElementById('btnMpRefreshRooms');
+    if (btnRefresh) {
+      btnRefresh.addEventListener('click', () => mp.requestRoomList());
+    }
+
+    const btnCopyCode = document.getElementById('btnMpCopyCode');
+    if (btnCopyCode) {
+      btnCopyCode.addEventListener('click', () => {
+        if (mp.currentRoom && mp.currentRoom.code) {
+          navigator.clipboard.writeText(mp.currentRoom.code).then(() => {
+            btnCopyCode.textContent = '✅ Copied!';
+            setTimeout(() => { btnCopyCode.textContent = '📋 Copy'; }, 2000);
+          });
+        }
+      });
+    }
+
+    const btnLeave = document.getElementById('btnMpLeaveRoom');
+    if (btnLeave) {
+      btnLeave.addEventListener('click', () => {
+        mp.leaveRoom();
+        document.getElementById('mpLobbyView').style.display = 'none';
+        document.getElementById('mpBrowserView').style.display = 'block';
+        mp.requestRoomList();
+      });
+    }
+
+    const btnToggleReady = document.getElementById('btnMpToggleReady');
+    if (btnToggleReady) {
+      btnToggleReady.addEventListener('click', () => {
+        this.mpLocalReady = !this.mpLocalReady;
+        const curCar = this.cars[this.selectedCarIndex] || {};
+        mp.toggleReady(this.mpLocalReady, {
+          slug: curCar.slug || 'porsche-911-gt3-rs',
+          color: curCar.custom_color || curCar.default_color || '#00f0ff',
+          name: curCar.name || 'Porsche 911 GT3 RS'
+        });
+        this.updateMpReadyButtonState();
+      });
+    }
+
+    const btnStartRace = document.getElementById('btnMpStartRace');
+    if (btnStartRace) {
+      btnStartRace.addEventListener('click', () => {
+        mp.startRace();
+      });
+    }
+
+    // Quick chat buttons
+    document.querySelectorAll('.mp-quick-chat-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const msg = btn.getAttribute('data-msg');
+        if (msg) mp.sendChat(msg);
+      });
+    });
+  }
+
+  getCurrentRacerConfig() {
+    const curCar = this.cars[this.selectedCarIndex] || {};
+    const username = (this.profile && this.profile.nickname) || 'Guest Racer';
+    return {
+      username: username,
+      carSlug: curCar.slug || 'porsche-911-gt3-rs',
+      carColor: curCar.custom_color || curCar.default_color || '#00f0ff',
+      carName: curCar.name || 'Porsche 911 GT3 RS'
+    };
+  }
+
+  async handleMpQuickMatch() {
+    const mp = window.racingMultiplayer;
+    await mp.connect();
+    mp.on('roomList', function onList(rooms) {
+      mp.off('roomList', onList);
+      const openRoom = rooms.find(r => r.status === 'waiting' && r.player_count < 4);
+      const racer = window.racingApp.getCurrentRacerConfig();
+      if (openRoom) {
+        mp.joinRoom(openRoom.code, racer);
+      } else {
+        mp.createRoom({
+          ...racer,
+          trackSlug: 'neon_city',
+          laps: 2
+        });
+      }
+    });
+    mp.requestRoomList();
+  }
+
+  async handleMpCreateRoom() {
+    const mp = window.racingMultiplayer;
+    await mp.connect();
+    const trackSlug = document.getElementById('mpCreateTrackSelect')?.value || 'neon_city';
+    const laps = parseInt(document.getElementById('mpCreateLapsSelect')?.value || '2', 10);
+    const racer = this.getCurrentRacerConfig();
+    mp.createRoom({
+      ...racer,
+      trackSlug,
+      laps
+    });
+  }
+
+  async handleMpJoinWithCode() {
+    const input = document.getElementById('mpJoinCodeInput');
+    const code = input ? input.value.trim().toUpperCase() : '';
+    if (!code) return;
+    const mp = window.racingMultiplayer;
+    await mp.connect();
+    const racer = this.getCurrentRacerConfig();
+    mp.joinRoom(code, racer);
+  }
+
+  renderMpRoomsList(rooms) {
+    const container = document.getElementById('mpRoomsListContainer');
+    if (!container) return;
+
+    if (!rooms || rooms.length === 0) {
+      container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.9rem; padding: 1rem 0;">No active rooms found. Click "Create Room" or "Quick Match" to start one!</div>';
+      return;
+    }
+
+    container.innerHTML = rooms.map(room => {
+      const trackObj = window.RacingTracks ? window.RacingTracks[room.track_slug] : null;
+      const trackName = trackObj ? trackObj.name : room.track_slug;
+      return `
+        <div class="feature-card" style="padding: 1rem; border: 1px solid var(--border-color);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-family: var(--font-mono); font-weight: 800; color: var(--accent-cyan); font-size: 1.1rem;">${room.code}</span>
+            <span class="level-chip" style="font-size: 0.75rem;">${room.player_count}/${room.max_players} Racers</span>
+          </div>
+          <div style="font-size: 0.85rem; color: #fff; font-weight: 700; margin-bottom: 0.3rem;">${trackName}</div>
+          <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.8rem;">Host: ${room.host_name} • ${room.laps} Laps</div>
+          <button class="btn btn-primary btn-join-room-card" data-code="${room.code}" style="width: 100%; padding: 0.4rem; font-size: 0.85rem;">
+            Join Room
+          </button>
+        </div>
+      `;
+    }).join('');
+
+    container.querySelectorAll('.btn-join-room-card').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const code = btn.getAttribute('data-code');
+        if (code) {
+          const mp = window.racingMultiplayer;
+          const racer = this.getCurrentRacerConfig();
+          mp.joinRoom(code, racer);
+        }
+      });
+    });
+  }
+
+  showMpRoomLobby(data) {
+    const browser = document.getElementById('mpBrowserView');
+    const lobby = document.getElementById('mpLobbyView');
+    if (browser) browser.style.display = 'none';
+    if (lobby) lobby.style.display = 'block';
+
+    const codeEl = document.getElementById('mpRoomCodeDisplay');
+    if (codeEl) codeEl.textContent = data.roomCode;
+
+    this.mpLocalReady = false;
+    this.updateMpReadyButtonState();
+    this.updateMpRoomLobby(data.room);
+  }
+
+  updateMpRoomLobby(room) {
+    if (!room) return;
+    const mp = window.racingMultiplayer;
+
+    const trackObj = window.RacingTracks ? window.RacingTracks[room.track_slug] : null;
+    const trackNameEl = document.getElementById('mpRoomTrackName');
+    if (trackNameEl) trackNameEl.textContent = trackObj ? trackObj.name : room.track_slug;
+
+    const lapsEl = document.getElementById('mpRoomLapsCount');
+    if (lapsEl) lapsEl.textContent = room.laps;
+
+    const countEl = document.getElementById('mpPlayerCount');
+    if (countEl) countEl.textContent = room.players.length;
+
+    // Render Slots (0..3)
+    const slotsContainer = document.getElementById('mpSlotsContainer');
+    if (slotsContainer) {
+      let slotsHtml = '';
+      for (let s = 0; s < 4; s++) {
+        const player = room.players.find(p => p.slot === s);
+        if (player) {
+          const isMe = (player.id === mp.playerId);
+          const readyBadge = player.is_ready
+            ? '<span style="color: #00f59b; font-weight: 700;">READY ✅</span>'
+            : '<span style="color: var(--accent-gold); font-weight: 700;">NOT READY ⏳</span>';
+
+          slotsHtml += `
+            <div class="feature-card" style="padding: 1.2rem; border: 1px solid ${isMe ? 'var(--accent-cyan)' : 'var(--border-color)'}; background: ${isMe ? 'rgba(0, 240, 255, 0.05)' : 'var(--bg-card)'};">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem;">
+                <span class="level-chip" style="font-size: 0.75rem;">GRID P${s + 1}</span>
+                ${player.is_host ? '<span style="color: var(--accent-gold); font-size: 0.8rem; font-weight: 800;">👑 HOST</span>' : ''}
+              </div>
+              <div style="font-weight: 800; font-size: 1.05rem; color: #fff; margin-bottom: 0.3rem;">
+                ${player.username} ${isMe ? '<span style="font-size: 0.75rem; color: var(--accent-cyan);">(You)</span>' : ''}
+              </div>
+              <div style="font-size: 0.85rem; color: var(--text-muted); display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.8rem;">
+                <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: ${player.car_color}; border: 1px solid rgba(255,255,255,0.4);"></span>
+                <span>${player.car_name}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.8rem; padding-top: 0.5rem; border-top: 1px solid rgba(255,255,255,0.06);">
+                <div>${readyBadge}</div>
+                <div style="color: var(--text-dim); font-family: var(--font-mono); font-size: 0.75rem;">${player.ping || 15}ms</div>
+              </div>
+            </div>
+          `;
+        } else {
+          slotsHtml += `
+            <div class="feature-card" style="padding: 1.2rem; border: 1px dashed rgba(255,255,255,0.1); background: rgba(0,0,0,0.2); opacity: 0.6; display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 120px;">
+              <span class="level-chip" style="font-size: 0.75rem; margin-bottom: 0.5rem;">GRID P${s + 1}</span>
+              <span style="font-size: 0.85rem; color: var(--text-dim);">Waiting for racer...</span>
+            </div>
+          `;
+        }
+      }
+      slotsContainer.innerHTML = slotsHtml;
+    }
+
+    // Host Launch controls
+    const isHost = (room.host_id === mp.playerId);
+    const allReady = room.players.length >= 1 && room.players.every(p => p.is_ready);
+    const startBtn = document.getElementById('btnMpStartRace');
+    const hostHint = document.getElementById('mpHostHint');
+
+    if (startBtn) {
+      if (isHost) {
+        startBtn.style.display = 'inline-flex';
+        startBtn.disabled = !allReady;
+        if (hostHint) {
+          hostHint.textContent = allReady
+            ? '🏎️ All drivers ready! Launch the race when set.'
+            : 'Waiting for all drivers to hit "Ready"...';
+        }
+      } else {
+        startBtn.style.display = 'none';
+        if (hostHint) {
+          hostHint.textContent = allReady
+            ? 'All drivers ready! Waiting for Host to launch race...'
+            : 'Get ready for the green flag!';
+        }
+      }
+    }
+  }
+
+  updateMpReadyButtonState() {
+    const btn = document.getElementById('btnMpToggleReady');
+    const icon = document.getElementById('btnMpReadyIcon');
+    const text = document.getElementById('btnMpReadyText');
+    if (!btn) return;
+
+    if (this.mpLocalReady) {
+      btn.style.borderColor = '#00f59b';
+      btn.style.color = '#00f59b';
+      if (icon) icon.textContent = '✅';
+      if (text) text.textContent = 'Ready!';
+    } else {
+      btn.style.borderColor = '';
+      btn.style.color = '';
+      if (icon) icon.textContent = '⏳';
+      if (text) text.textContent = 'I Am Ready';
+    }
+  }
+
+  appendMpChat(data) {
+    const box = document.getElementById('mpChatBox');
+    if (!box) return;
+    const line = document.createElement('div');
+    line.innerHTML = `<strong>${data.username}:</strong> <span>${data.message}</span>`;
+    box.appendChild(line);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  launchMultiplayerRace(data) {
+    console.log("🏁 Launching Real-Time Multiplayer Race!", data);
+    this.selectedTrackSlug = data.track_slug || 'los-santos';
+    this.selectedRaceMode = 'multiplayer';
+
+    // Transition to game viewport
+    this.navigateTo('game');
+    if (this.requestLandscapeOrientation) {
+      this.requestLandscapeOrientation();
+    }
+
+    // Find local active car configuration
+    let activeCar = (this.cars && this.cars.find(c => c.is_selected)) || 
+                    (this.cars && this.cars[this.selectedCarIndex]) || 
+                    (this.cars && this.cars[0]) || {
+                      slug: 'porsche-911-gt3-rs',
+                      name: 'Porsche 911 GT3 RS',
+                      category: 'Supercars',
+                      color: '#00f0ff',
+                      default_color: '#00f0ff',
+                      top_speed_mph: 205,
+                      horsepower: 518,
+                      accel_0_60: 3.0,
+                      weight_kg: 1450,
+                      handling_score: 95,
+                      braking_score: 92,
+                      engine_level: 1,
+                      handling_level: 1,
+                      nitro_level: 1,
+                      audio_pitch: 1.0
+                    };
+    const mp = window.racingMultiplayer;
+
+    // Launch Three.js 3D Engine with Multiplayer Options
+    if (this.gameEngine) {
+      this.gameEngine.stop();
+    }
+    this.gameEngine = new RacingGameEngine3D('game3DContainer');
+
+    const selectedTime = (this.trackTimePrefs && this.trackTimePrefs[this.selectedTrackSlug]) || 'night';
+
+    this.gameEngine.setupRace(this.selectedTrackSlug, {
+      slug: activeCar.slug,
+      name: activeCar.name,
+      category: activeCar.category,
+      color: activeCar.custom_color || activeCar.default_color || '#00f0ff',
+      top_speed_mph: activeCar.top_speed_mph || 205,
+      horsepower: activeCar.horsepower || 500,
+      accel_0_60: activeCar.accel_0_60 || 3.2,
+      weight_kg: activeCar.weight_kg || 1400,
+      handling_score: activeCar.handling_score || 90,
+      braking_score: activeCar.braking_score || 90,
+      engine_level: activeCar.engine_level || 1,
+      handling_level: activeCar.handling_level || 1,
+      nitro_level: activeCar.nitro_level || 1,
+      audio_pitch: activeCar.audio_pitch || 1.0
+    }, [], selectedTime, {
+      isMultiplayer: true,
+      localPlayerId: mp.playerId,
+      slot: mp.slot,
+      start_timestamp: data.start_timestamp,
+      track_slug: data.track_slug,
+      laps: data.laps,
+      players: data.players
+    });
+
+    const missionObj = document.getElementById('hudMissionObjective');
+    if (missionObj) {
+      missionObj.textContent = `🌐 MULTIPLAYER: ${data.players.length} Racers Circuit • ${data.laps} Laps`;
+    }
+  }
+
+  showMultiplayerResultsModal(standings) {
+    const modal = document.getElementById('resultsModal');
+    if (!modal) return;
+
+    const mp = window.racingMultiplayer;
+    const myResult = standings.find(s => s.id === mp.playerId) || standings[0];
+    const rankTitles = { 1: 'VICTORY - 1ST PLACE!', 2: '2ND PLACE PODIUM', 3: '3RD PLACE PODIUM', 4: '4TH PLACE' };
+    const crowns = { 1: '👑', 2: '🥈', 3: '🥉', 4: '🏁' };
+
+    document.getElementById('resCrown').textContent = crowns[myResult.rank] || '🏁';
+    document.getElementById('resPositionTitle').textContent = rankTitles[myResult.rank] || `P${myResult.rank} FINISH`;
+    document.getElementById('resTrackName').textContent = `Multiplayer Standings • ${(this.selectedTrackSlug || 'CIRCUIT').toUpperCase()}`;
+
+    const min = Math.floor(myResult.race_time / 60);
+    const sec = (myResult.race_time % 60).toFixed(2);
+    document.getElementById('resTotalTime').textContent = `${min}:${sec < 10 ? '0' : ''}${sec}`;
+    document.getElementById('resBestLap').textContent = `${myResult.best_lap ? myResult.best_lap.toFixed(2) : '--'}s`;
+
+    // Coin rewards based on multiplayer rank
+    const coinRewards = { 1: 1200, 2: 700, 3: 450, 4: 250 };
+    const xpRewards = { 1: 500, 2: 300, 3: 200, 4: 100 };
+    const rewardCoins = coinRewards[myResult.rank] || 250;
+    const rewardXp = xpRewards[myResult.rank] || 100;
+
+    const prizeCoinsEl = document.getElementById('resPrizeCoins');
+    if (prizeCoinsEl) prizeCoinsEl.textContent = `+$${rewardCoins}`;
+
+    const prizeXpEl = document.getElementById('resPrizeXp');
+    if (prizeXpEl) prizeXpEl.textContent = `+${rewardXp} XP`;
+
+    modal.classList.add('active');
   }
 }
 
