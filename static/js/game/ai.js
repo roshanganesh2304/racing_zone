@@ -47,8 +47,8 @@ class AIRacerController {
     let angleDiff = targetAngle - this.vehicle.angle;
 
     // Normalize angle difference to [-PI, PI]
-    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+    angleDiff = Math.atan2(Math.sin(targetAngle - this.vehicle.angle), Math.cos(targetAngle - this.vehicle.angle));
+    if (!Number.isFinite(angleDiff)) angleDiff = 0;
 
     let left = false;
     let right = false;

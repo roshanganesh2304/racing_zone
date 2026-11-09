@@ -87,7 +87,7 @@ class TrafficAndPoliceManager {
       { slug: 'ford-mustang-dark-horse', color: '#181a1f', name: 'Executive Cruiser' },
       { slug: 'dodge-challenger-hellcat', color: '#c1121f', name: 'Red Sport Coupe' },
       { slug: 'chevrolet-corvette-z06', color: '#f4f4f4', name: 'White Commuter' },
-      { slug: 'nissan-gt-r-nismo', color: '#1d3557', name: 'Navy Sedan' },
+      { slug: 'nissan-gtr-nismo', color: '#1d3557', name: 'Navy Sedan' },
       { slug: 'bmw-m3-competition', color: '#8d99ae', name: 'Silver Fleet' }
     ];
 
@@ -173,9 +173,8 @@ class TrafficAndPoliceManager {
         }
 
         const targetAngle = Math.atan2(dx, dz);
-        let angleDiff = targetAngle - car.angle;
-        while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-        while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+        let angleDiff = Math.atan2(Math.sin(targetAngle - car.angle), Math.cos(targetAngle - car.angle));
+        if (!Number.isFinite(angleDiff)) angleDiff = 0;
 
         car.angle += angleDiff * Math.min(1.0, dt * 3.5);
 
@@ -203,10 +202,12 @@ class TrafficAndPoliceManager {
           w.rr.roll.rotation.x += rollRate;
         }
 
-        // Relocate traffic that falls far behind the player to appear ahead!
+        // Relocate traffic that has fallen far behind the player to appear ahead
+        const now = (typeof performance !== 'undefined') ? performance.now() : Date.now();
         const distToPlayer = Math.hypot(car.x - playerX, car.z - playerZ);
-        if (distToPlayer > 180) {
-          const aheadIdx = (car.currentWpIdx + 4) % wps.length;
+        if (distToPlayer > 280 && (!car.lastRelocateTime || (now - car.lastRelocateTime) > 2500)) {
+          car.lastRelocateTime = now;
+          const aheadIdx = (car.currentWpIdx + 3) % wps.length;
           const aheadWp = wps[aheadIdx];
           const aheadNext = wps[(aheadIdx + 1) % wps.length];
           const ax = (aheadWp.z !== undefined) ? aheadWp.x : (aheadWp.x - 1400) * scale;
@@ -248,9 +249,8 @@ class TrafficAndPoliceManager {
 
       // Rotate toward player
       const targetAngle = Math.atan2(dx, dz);
-      let angleDiff = targetAngle - cop.angle;
-      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      let angleDiff = Math.atan2(Math.sin(targetAngle - cop.angle), Math.cos(targetAngle - cop.angle));
+      if (!Number.isFinite(angleDiff)) angleDiff = 0;
 
       cop.angle += angleDiff * Math.min(1.0, dt * 2.8);
 
@@ -296,7 +296,12 @@ class TrafficAndPoliceManager {
       if (this.escapeTimer >= this.escapeRequiredTime) {
         // Escaped! Clear wanted level
         this.setWantedLevel(0);
-        alert('🚨 EVADED! You successfully lost the police pursuit! +$2,000 Escape Bonus awarded!');
+        if (window.racingApp && window.racingApp.gameEngine && window.racingApp.gameEngine.triggerCarxFeat) {
+          window.racingApp.gameEngine.triggerCarxFeat('🚨 POLICE EVADED! +$2,000', 2000);
+        }
+        if (window.racingApp && window.racingApp.gameEngine && window.racingApp.gameEngine.showGtaDistrictBanner) {
+          window.racingApp.gameEngine.showGtaDistrictBanner('🚨 PURSUIT EVADED', '+$2,000 Escape Bounty Added');
+        }
         if (window.racingApp && window.racingApp.profile) {
           window.racingApp.profile.coins += 2000;
           window.racingApp.updateNavbarUser();

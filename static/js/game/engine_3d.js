@@ -114,6 +114,7 @@ class RacingGameEngine3D {
     };
     this.nitroDepleted = false;
     this.nitroKeysDown = new Set();
+    this.inputCleanups = [];
 
     this.lastTime = 0;
     this.bindInputs();
@@ -211,7 +212,15 @@ class RacingGameEngine3D {
         this.resetPlayerToTrack();
       }
     };
-    window.addEventListener('keydown', this.keydownHandler);
+    const addListener = (target, type, handler, opts) => {
+      if (!target) return;
+      target.addEventListener(type, handler, opts);
+      this.inputCleanups.push(() => {
+        try { target.removeEventListener(type, handler, opts); } catch (_) {}
+      });
+    };
+
+    addListener(window, 'keydown', this.keydownHandler);
 
     this.keyupHandler = (e) => {
       const code = e.code || '';
@@ -236,7 +245,7 @@ class RacingGameEngine3D {
         }
       }
     };
-    window.addEventListener('keyup', this.keyupHandler);
+    addListener(window, 'keyup', this.keyupHandler);
 
     this.blurHandler = () => {
       this.nitroKeysDown.clear();
@@ -246,24 +255,27 @@ class RacingGameEngine3D {
       const nitroBtn = document.getElementById('btnNitro');
       if (nitroBtn) nitroBtn.classList.remove('touch-active');
     };
-    window.addEventListener('blur', this.blurHandler);
+    addListener(window, 'blur', this.blurHandler);
 
     // Window resize & orientation change
     this.resizeHandler = () => this.handleResize();
-    window.addEventListener('resize', this.resizeHandler);
+    addListener(window, 'resize', this.resizeHandler);
     this.orientationHandler = () => {
       setTimeout(() => this.handleResize(), 150);
     };
-    window.addEventListener('orientationchange', this.orientationHandler);
+    addListener(window, 'orientationchange', this.orientationHandler);
 
     // On-Screen Driving Controls (Pointer, Mouse, and Touch)
     const bindBtn = (id, key, onTap) => {
       const el = document.getElementById(id);
       if (!el) return;
 
+      let isDown = false;
       const onPress = (e) => {
         if (e && e.cancelable) e.preventDefault();
         if (e) e.stopPropagation();
+        if (isDown) return;
+        isDown = true;
         this.keys[key] = true;
         el.classList.add('touch-active');
 
@@ -273,34 +285,36 @@ class RacingGameEngine3D {
       const onRelease = (e) => {
         if (e && e.cancelable) e.preventDefault();
         if (e) e.stopPropagation();
+        if (!isDown) return;
+        isDown = false;
         this.keys[key] = false;
         el.classList.remove('touch-active');
       };
 
       // Pointer Events (unifies Mouse, Touch & Pen with capture)
-      el.addEventListener('pointerdown', (e) => {
+      addListener(el, 'pointerdown', (e) => {
         try { el.setPointerCapture(e.pointerId); } catch (_) {}
         onPress(e);
       });
-      el.addEventListener('pointerup', (e) => {
+      addListener(el, 'pointerup', (e) => {
         try { el.releasePointerCapture(e.pointerId); } catch (_) {}
         onRelease(e);
       });
-      el.addEventListener('pointercancel', onRelease);
-      el.addEventListener('pointerleave', onRelease);
+      addListener(el, 'pointercancel', onRelease);
+      addListener(el, 'pointerleave', onRelease);
 
       // Mouse & Touch fallback listeners
-      el.addEventListener('mousedown', onPress);
-      el.addEventListener('mouseup', onRelease);
-      el.addEventListener('mouseleave', onRelease);
-      el.addEventListener('touchstart', onPress, { passive: false });
-      el.addEventListener('touchend', onRelease, { passive: false });
-      el.addEventListener('touchcancel', onRelease, { passive: false });
+      addListener(el, 'mousedown', onPress);
+      addListener(el, 'mouseup', onRelease);
+      addListener(el, 'mouseleave', onRelease);
+      addListener(el, 'touchstart', onPress, { passive: false });
+      addListener(el, 'touchend', onRelease, { passive: false });
+      addListener(el, 'touchcancel', onRelease, { passive: false });
 
       // Click fallback for immediate tactile tap
-      el.addEventListener('click', (e) => {
+      addListener(el, 'click', (e) => {
         e.preventDefault();
-        if (onTap) onTap();
+        e.stopPropagation();
       });
     };
 
@@ -340,9 +354,12 @@ class RacingGameEngine3D {
     // Standalone Mobile / Touch Nitro Button (Hold-to-Boost / Long-Press)
     const nitroBtn = document.getElementById('btnNitro');
     if (nitroBtn) {
+      let isNitroDown = false;
       const onNitroPress = (e) => {
         if (e && e.cancelable) e.preventDefault();
         if (e) e.stopPropagation();
+        if (isNitroDown) return;
+        isNitroDown = true;
 
         if (!this.nitroDepleted && this.playerVehicle && this.playerVehicle.nitroAmount > 5) {
           this.keys.nitro = true;
@@ -357,6 +374,8 @@ class RacingGameEngine3D {
       const onNitroRelease = (e) => {
         if (e && e.cancelable) e.preventDefault();
         if (e) e.stopPropagation();
+        if (!isNitroDown) return;
+        isNitroDown = false;
 
         this.keys.nitro = false;
         this.nitroDepleted = false; // Finger released; clears depleted flag so next tap can activate
@@ -366,25 +385,25 @@ class RacingGameEngine3D {
         nitroBtn.classList.remove('touch-active');
       };
 
-      nitroBtn.addEventListener('pointerdown', (e) => {
+      addListener(nitroBtn, 'pointerdown', (e) => {
         try { nitroBtn.setPointerCapture(e.pointerId); } catch (_) {}
         onNitroPress(e);
       });
-      nitroBtn.addEventListener('pointerup', (e) => {
+      addListener(nitroBtn, 'pointerup', (e) => {
         try { nitroBtn.releasePointerCapture(e.pointerId); } catch (_) {}
         onNitroRelease(e);
       });
-      nitroBtn.addEventListener('pointercancel', onNitroRelease);
-      nitroBtn.addEventListener('pointerleave', onNitroRelease);
+      addListener(nitroBtn, 'pointercancel', onNitroRelease);
+      addListener(nitroBtn, 'pointerleave', onNitroRelease);
 
-      nitroBtn.addEventListener('touchstart', onNitroPress, { passive: false });
-      nitroBtn.addEventListener('touchend', onNitroRelease, { passive: false });
-      nitroBtn.addEventListener('touchcancel', onNitroRelease, { passive: false });
-      nitroBtn.addEventListener('mousedown', onNitroPress);
-      nitroBtn.addEventListener('mouseup', onNitroRelease);
-      nitroBtn.addEventListener('mouseleave', onNitroRelease);
+      addListener(nitroBtn, 'touchstart', onNitroPress, { passive: false });
+      addListener(nitroBtn, 'touchend', onNitroRelease, { passive: false });
+      addListener(nitroBtn, 'touchcancel', onNitroRelease, { passive: false });
+      addListener(nitroBtn, 'mousedown', onNitroPress);
+      addListener(nitroBtn, 'mouseup', onNitroRelease);
+      addListener(nitroBtn, 'mouseleave', onNitroRelease);
 
-      nitroBtn.addEventListener('click', (e) => {
+      addListener(nitroBtn, 'click', (e) => {
         e.preventDefault();
         e.stopPropagation();
       });
@@ -399,10 +418,18 @@ class RacingGameEngine3D {
       }
     });
 
-    this.initMobileSteerModes();
+    this.initMobileSteerModes(addListener);
   }
 
-  initMobileSteerModes() {
+  initMobileSteerModes(addListener = null) {
+    const registerListener = addListener || ((target, type, handler, opts) => {
+      if (!target) return;
+      target.addEventListener(type, handler, opts);
+      this.inputCleanups.push(() => {
+        try { target.removeEventListener(type, handler, opts); } catch (_) {}
+      });
+    });
+
     this.steerControlMode = localStorage.getItem('racing_steer_mode') || 'buttons';
     this.mobileSteerValue = 0;
     this.virtualWheelAngle = 0;
@@ -412,7 +439,7 @@ class RacingGameEngine3D {
     // 1. Wire Mode Selector Tabs
     const tabs = document.querySelectorAll('.steer-mode-tab');
     tabs.forEach(tab => {
-      tab.addEventListener('click', (e) => {
+      registerListener(tab, 'click', (e) => {
         e.preventDefault();
         e.stopPropagation();
         const targetMode = tab.dataset.steerMode;
@@ -462,15 +489,15 @@ class RacingGameEngine3D {
         }, 200);
       };
 
-      wheel.addEventListener('pointerdown', onWheelDown);
-      window.addEventListener('pointermove', onWheelMove);
-      window.addEventListener('pointerup', onWheelUp);
-      window.addEventListener('pointercancel', onWheelUp);
+      registerListener(wheel, 'pointerdown', onWheelDown);
+      registerListener(window, 'pointermove', onWheelMove);
+      registerListener(window, 'pointerup', onWheelUp);
+      registerListener(wheel, 'pointercancel', onWheelUp);
 
       // Touch fallback
-      wheel.addEventListener('touchstart', onWheelDown, { passive: false });
-      window.addEventListener('touchmove', onWheelMove, { passive: false });
-      window.addEventListener('touchend', onWheelUp, { passive: false });
+      registerListener(wheel, 'touchstart', onWheelDown, { passive: false });
+      registerListener(window, 'touchmove', onWheelMove, { passive: false });
+      registerListener(window, 'touchend', onWheelUp, { passive: false });
     }
 
     // Apply saved mode
@@ -894,7 +921,7 @@ class RacingGameEngine3D {
       if (trafficEl) trafficEl.textContent = 'FIA GP (No Traffic)';
       if (policeEl) policeEl.textContent = 'None (Safety Car)';
     } else {
-      this.trafficPolice.initTraffic(this.trackData, 14);
+      this.trafficPolice.initTraffic(this.trackData, 8);
     }
 
     // Trigger GTA District notification card
@@ -1106,8 +1133,13 @@ class RacingGameEngine3D {
     this.f1DrsAvailable = false;
 
     this.state = 'COUNTDOWN';
-    this.countdownTimer = this.isF1Mode ? 4.8 : 3.0;
-    this.countdownStep = 3;
+    if (this.isMultiplayer && multiplayerOptions && multiplayerOptions.start_timestamp) {
+      const remaining = (multiplayerOptions.start_timestamp * 1000 - Date.now()) / 1000;
+      this.countdownTimer = Math.max(0.6, remaining);
+    } else {
+      this.countdownTimer = this.isF1Mode ? 4.8 : 3.0;
+    }
+    this.countdownStep = Math.max(1, Math.ceil(this.countdownTimer));
     this.goTimer = 0.9;
 
     const cdEl = document.getElementById('countdownOverlay');
@@ -1542,7 +1574,7 @@ class RacingGameEngine3D {
 
     // 4. Steering & Dynamic Drift Physics (Buttons, Virtual Wheel, and Tilt Gyro)
     let steerInput = 0;
-    if (Math.abs(this.mobileSteerValue || 0) > 0.01) {
+    if (['tilt', 'wheel'].includes(this.steerControlMode) && Math.abs(this.mobileSteerValue || 0) > 0.01) {
       steerInput = this.mobileSteerValue; // Analog steering from Virtual Wheel or Tilt Gyro
     } else {
       if (this.keys.left) steerInput += 1;  // Left steering turns car left on screen
@@ -1739,9 +1771,8 @@ class RacingGameEngine3D {
       }
 
       const targetAngle = Math.atan2(dx, dz);
-      let angleDiff = targetAngle - ai.angle;
-      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      let angleDiff = Math.atan2(Math.sin(targetAngle - ai.angle), Math.cos(targetAngle - ai.angle));
+      if (!Number.isFinite(angleDiff)) angleDiff = 0;
 
       ai.angle += angleDiff * Math.min(1.0, dt * 3.2);
 
@@ -1906,12 +1937,12 @@ class RacingGameEngine3D {
       carA.angle += steerTorque * 0.025;
     }
 
-    // 3. Contact Sparks, Crash Sound, and Impact Rumble
-    const contactX = (sA.x + sB.x) / 2;
-    const contactZ = (sA.z + sB.z) / 2;
-    this.spawnSparks(contactX, 0.5, contactZ, nx, nz);
-
+    // 3. Contact Sparks, Crash Sound, and Impact Rumble (Player vehicle only to avoid GPU particle spikes)
     if (isPlayerA) {
+      const contactX = (sA.x + sB.x) / 2;
+      const contactZ = (sA.z + sB.z) / 2;
+      this.spawnSparks(contactX, 0.5, contactZ, nx, nz);
+
       const now = performance.now();
       if (!this.lastCarCrashTime || (now - this.lastCarCrashTime) > 200) {
         this.lastCarCrashTime = now;
@@ -2919,38 +2950,6 @@ class RacingGameEngine3D {
     }
   }
 
-  checkNearMisses(dt) {
-    if (!this.playerVehicle || !this.character.isInVehicle) return;
-    const speedMph = Math.abs(this.playerVehicle.speed) * 2.237;
-    if (speedMph < 58) return;
-
-    const now = performance.now();
-    if (now - this.lastNearMissTime < 1800) return; // 1.8s cooldown
-
-    const checkList = [];
-    if (this.aiVehicles) checkList.push(...this.aiVehicles);
-    if (this.trafficPolice) {
-      if (this.trafficPolice.trafficCars) checkList.push(...this.trafficPolice.trafficCars);
-      if (this.trafficPolice.policeCruisers) checkList.push(...this.trafficPolice.policeCruisers);
-    }
-
-    for (const other of checkList) {
-      const ox = other.x !== undefined ? other.x : (other.mesh ? other.mesh.position.x : null);
-      const oz = other.z !== undefined ? other.z : (other.mesh ? other.mesh.position.z : null);
-      if (ox === null || oz === null) continue;
-
-      const d = Math.hypot(this.playerVehicle.x - ox, this.playerVehicle.z - oz);
-      if (d > 2.0 && d < 4.8) {
-        this.lastNearMissTime = now;
-        this.nearMissCount++;
-        const reward = speedMph > 115 ? 250 : 100;
-        const text = speedMph > 115 ? `🔥 HIGHWAY COMBO! +$${reward}` : `⚡ NEAR MISS! +$${reward}`;
-        this.triggerCarxFeat(text, reward);
-        break;
-      }
-    }
-  }
-
   triggerCarxFeat(text, reward = 100) {
     const popup = document.getElementById('carxFeatPopup');
     if (!popup) return;
@@ -2958,9 +2957,11 @@ class RacingGameEngine3D {
     popup.classList.add('active');
 
     // Add cash bonus to user career wallet
-    if (window.racingApp && typeof window.racingApp.userCash === 'number') {
-      window.racingApp.userCash += reward;
-      window.racingApp.updateUI();
+    if (window.racingApp && window.racingApp.profile && typeof reward === 'number') {
+      window.racingApp.profile.coins = (window.racingApp.profile.coins || 0) + reward;
+      if (window.racingApp.updateNavbarUser) {
+        window.racingApp.updateNavbarUser();
+      }
     }
 
     clearTimeout(this.featTimeout);
@@ -3082,9 +3083,8 @@ class RacingGameEngine3D {
       rVeh.mesh.position.set(rVeh.x, rVeh.y, rVeh.z);
 
       // Angle interpolation (handling shortest angular distance)
-      let diff = rVeh.targetAngle - rVeh.angle;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      while (diff > Math.PI) diff -= Math.PI * 2;
+      let diff = Math.atan2(Math.sin(rVeh.targetAngle - rVeh.angle), Math.cos(rVeh.targetAngle - rVeh.angle));
+      if (!Number.isFinite(diff)) diff = 0;
       rVeh.angle += diff * 0.35;
       rVeh.mesh.rotation.set(0, rVeh.angle, 0);
 
@@ -3111,6 +3111,16 @@ class RacingGameEngine3D {
 
   stop() {
     this.state = 'STOPPED';
+
+    // 1. Clean up all tracked input event listeners
+    if (this.inputCleanups && this.inputCleanups.length) {
+      this.inputCleanups.forEach(fn => {
+        try { fn(); } catch (_) {}
+      });
+      this.inputCleanups = [];
+    }
+    this.disableTiltSteering();
+
     if (this.keydownHandler) {
       window.removeEventListener('keydown', this.keydownHandler);
       this.keydownHandler = null;
@@ -3140,9 +3150,36 @@ class RacingGameEngine3D {
       window.racingAudio.stopPoliceSiren();
       window.racingAudio.stopRadio();
     }
+    if (this.scene) {
+      this.disposeHierarchy(this.scene);
+    }
     if (this.renderer) {
       this.renderer.dispose();
     }
+  }
+
+  disposeHierarchy(obj) {
+    if (!obj) return;
+    obj.traverse(child => {
+      if (child.geometry) {
+        try { child.geometry.dispose(); } catch (_) {}
+      }
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => {
+            try {
+              if (m.map) m.map.dispose();
+              m.dispose();
+            } catch (_) {}
+          });
+        } else {
+          try {
+            if (child.material.map) child.material.map.dispose();
+            child.material.dispose();
+          } catch (_) {}
+        }
+      }
+    });
   }
 }
 

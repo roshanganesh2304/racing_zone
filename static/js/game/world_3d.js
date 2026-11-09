@@ -214,10 +214,35 @@ class World3D {
     this.sunLight.target.updateMatrixWorld();
   }
 
-  buildTrackWorld(trackDef, timeOfDay = null) {
+  clearEnvironment() {
+    if (!this.environmentGroup) return;
+    this.environmentGroup.traverse(child => {
+      if (child.geometry) {
+        try { child.geometry.dispose(); } catch (_) {}
+      }
+      if (child.material) {
+        if (Array.isArray(child.material)) {
+          child.material.forEach(m => {
+            try {
+              if (m.map) m.map.dispose();
+              m.dispose();
+            } catch (_) {}
+          });
+        } else {
+          try {
+            if (child.material.map) child.material.map.dispose();
+            child.material.dispose();
+          } catch (_) {}
+        }
+      }
+    });
     while (this.environmentGroup.children.length > 0) {
       this.environmentGroup.remove(this.environmentGroup.children[0]);
     }
+  }
+
+  buildTrackWorld(trackDef, timeOfDay = null) {
+    this.clearEnvironment();
     this.checkpoints3D = [];
     this.animatedObjects = [];
     this.buildingColliders = [];

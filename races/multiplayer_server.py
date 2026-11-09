@@ -4,6 +4,19 @@ Handles match lobbies, real-time vehicle telemetry broadcasts,
 room state synchronization, and race result arbitration.
 """
 
+import sys
+import os
+from pathlib import Path
+
+# Auto-inject virtual environment site-packages if running with system Python in terminal
+_project_root = Path(__file__).resolve().parent.parent
+for _vd in [_project_root / "venv", _project_root.parent / "venv"]:
+    if _vd.exists():
+        for _sp in _vd.glob("lib/python*/site-packages"):
+            if str(_sp) not in sys.path:
+                sys.path.insert(0, str(_sp))
+        break
+
 import asyncio
 import json
 import logging
@@ -21,7 +34,7 @@ def generate_room_code():
     return f"RZ-{suffix}"
 
 class RaceRoom:
-    def __init__(self, code, host_player_id, track_slug="neon_city", laps=2, is_public=True):
+    def __init__(self, code, host_player_id, track_slug="los-santos", laps=2, is_public=True):
         self.code = code
         self.host_id = host_player_id
         self.track_slug = track_slug
@@ -154,7 +167,7 @@ class MultiplayerServer:
         while code in self.rooms:
             code = generate_room_code()
 
-        track_slug = data.get("track_slug", "neon_city")
+        track_slug = data.get("track_slug", "los-santos")
         laps = int(data.get("laps", 2))
         room = RaceRoom(code, player_id, track_slug=track_slug, laps=laps)
 

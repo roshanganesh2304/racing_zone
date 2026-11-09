@@ -1754,17 +1754,36 @@ class RacingApp {
       // Update local profile balance
       await this.refreshCarData();
 
-      // Show level up notification if leveled up
-      if (serverResponse.leveled_up) {
-        alert(`🌟 LEVEL UP! You reached Driver Level ${serverResponse.new_level}! Bonus credits added to your account!`);
-      }
-      if (serverResponse.new_achievements && serverResponse.new_achievements.length > 0) {
-        alert(`🏆 New Achievement Unlocked: ${serverResponse.new_achievements.join(', ')}!`);
+      // In-modal rewards and level-up notices (Non-blocking)
+      const noticesEl = document.getElementById('resSpecialNotices');
+      if (noticesEl) {
+        noticesEl.innerHTML = '';
+        let hasNotice = false;
+
+        if (serverResponse.leveled_up) {
+          hasNotice = true;
+          const lvlCard = document.createElement('div');
+          lvlCard.style.cssText = 'background: rgba(255, 214, 0, 0.12); border: 1px solid #ffd600; border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.85rem; color: #ffd600; font-weight: 700; text-align: center;';
+          lvlCard.innerHTML = `🌟 LEVEL UP! You reached Driver Level ${serverResponse.new_level}! Bonus credits deposited.`;
+          noticesEl.appendChild(lvlCard);
+        }
+
+        if (serverResponse.new_achievements && serverResponse.new_achievements.length > 0) {
+          hasNotice = true;
+          const achCard = document.createElement('div');
+          achCard.style.cssText = 'background: rgba(0, 240, 255, 0.12); border: 1px solid #00f0ff; border-radius: 8px; padding: 0.6rem 0.8rem; font-size: 0.85rem; color: #00f0ff; font-weight: 700; text-align: center;';
+          achCard.innerHTML = `🏆 Achievement Unlocked: ${serverResponse.new_achievements.join(', ')}!`;
+          noticesEl.appendChild(achCard);
+        }
+
+        noticesEl.style.display = hasNotice ? 'flex' : 'none';
       }
     } catch (e) {
       console.warn('Failed submitting race results:', e);
       document.getElementById('resPrizeCoins').textContent = '+$500';
       document.getElementById('resXpEarned').textContent = '+300 XP';
+      const noticesEl = document.getElementById('resSpecialNotices');
+      if (noticesEl) noticesEl.style.display = 'none';
     }
 
     modal.classList.add('active');
@@ -2104,7 +2123,7 @@ class RacingApp {
       } else {
         mp.createRoom({
           ...racer,
-          trackSlug: 'neon_city',
+          trackSlug: 'los-santos',
           laps: 2
         });
       }
@@ -2115,7 +2134,7 @@ class RacingApp {
   async handleMpCreateRoom() {
     const mp = window.racingMultiplayer;
     await mp.connect();
-    const trackSlug = document.getElementById('mpCreateTrackSelect')?.value || 'neon_city';
+    const trackSlug = document.getElementById('mpCreateTrackSelect')?.value || 'los-santos';
     const laps = parseInt(document.getElementById('mpCreateLapsSelect')?.value || '2', 10);
     const racer = this.getCurrentRacerConfig();
     mp.createRoom({

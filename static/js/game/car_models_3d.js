@@ -1109,6 +1109,7 @@ window.CarModels3D = {
       headlights: [],
       brakeLights: [],
       nitroFlames: [],
+      policeLightbar: proceduralChassis.userData ? proceduralChassis.userData.policeLightbar : null,
       isRealModelLoaded: false
     };
 
@@ -1182,9 +1183,15 @@ window.CarModels3D = {
       if (this.cachedModels[slug]) {
         applyRealModel(this.cachedModels[slug]);
       } else if (this.REAL_MODEL_CONFIGS[slug]) {
-        this.loadRealModel(slug, (normalized) => {
-          applyRealModel(normalized);
-        });
+        // In showroom/garage or menu, load full CAD model. During high-speed racing, prioritize smooth 60 FPS gameplay
+        const isRacingNow = typeof window !== 'undefined' && window.racingApp && window.racingApp.currentScreen === 'game';
+        if (!isRacingNow) {
+          this.loadRealModel(slug, (normalized) => {
+            requestAnimationFrame(() => {
+              applyRealModel(normalized);
+            });
+          });
+        }
       }
     } else if (options.isAI) {
       if (this.cachedModels[slug]) {
@@ -2632,10 +2639,13 @@ window.CarModels3D = {
       lightsGroup.add(spotR, spotR.target);
     }
 
-    // Front soft ambient road fill point light (soft illumination on asphalt)
-    const frontFill = new THREE.PointLight(0xf0f7ff, 0.9, 12, 2);
-    frontFill.position.set(0, 0.48, hz + 0.30);
-    lightsGroup.add(frontFill);
+    // Front soft ambient road fill point light (soft illumination on asphalt - player car only)
+    let frontFill = null;
+    if (options.isPlayer) {
+      frontFill = new THREE.PointLight(0xf0f7ff, 0.9, 12, 2);
+      frontFill.position.set(0, 0.48, hz + 0.30);
+      lightsGroup.add(frontFill);
+    }
 
     // 3. REAR TAILLIGHTS (Flush-fitted signature lenses aligned to 3D model angles)
     const brakeMeshes = [];
@@ -2739,14 +2749,17 @@ window.CarModels3D = {
       }
     }
 
-    // 4. Rear Ruby Red Ground Glow (active by default, flares upon braking)
-    const brakeGlow = new THREE.PointLight(0xff0025, 1.1, 7.5, 2);
-    brakeGlow.position.set(0, ty, tz - 0.15);
-    lightsGroup.add(brakeGlow);
+    // 4. Rear Ruby Red Ground Glow (player car only - avoids 30+ lights crashing WebGL)
+    let brakeGlow = null;
+    if (options.isPlayer) {
+      brakeGlow = new THREE.PointLight(0xff0025, 1.1, 7.5, 2);
+      brakeGlow.position.set(0, ty, tz - 0.15);
+      lightsGroup.add(brakeGlow);
+    }
 
     root.userData.lightsGroup = lightsGroup;
     root.userData.headlights = spotL && spotR ? [spotL, spotR] : [];
-    root.userData.brakeLights = [brakeGlow, ...brakeMeshes];
+    root.userData.brakeLights = brakeGlow ? [brakeGlow, ...brakeMeshes] : brakeMeshes;
     root.userData.brakeGlow = brakeGlow;
     root.userData.brakeMat = tailMat;
     root.userData.nitroFlames = [flameL, flameR];

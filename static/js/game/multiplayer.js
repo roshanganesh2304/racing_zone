@@ -248,7 +248,7 @@ class MultiplayerClient {
       car_slug: carSlug,
       car_color: carColor,
       car_name: carName,
-      track_slug: trackSlug || 'neon_city',
+      track_slug: trackSlug || 'los-santos',
       laps: laps || 2,
       ping: this.ping
     });

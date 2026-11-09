@@ -14,6 +14,7 @@ def get_or_create_current_profile(request):
             user=request.user,
             defaults={'nickname': request.user.first_name or request.user.username}
         )
+        ensure_starter_cars(profile)
         return profile
     
     # Check session for guest user ID
@@ -22,6 +23,7 @@ def get_or_create_current_profile(request):
         try:
             user = User.objects.get(id=guest_user_id)
             profile, _ = PlayerProfile.objects.get_or_create(user=user)
+            ensure_starter_cars(profile)
             return profile
         except User.DoesNotExist:
             pass
@@ -42,16 +44,33 @@ def get_or_create_current_profile(request):
         coins=2500,
         is_guest=True
     )
-    # Unlock default car
-    default_car = Car.objects.filter(is_default=True).first() or Car.objects.first()
-    if default_car:
+    ensure_starter_cars(profile)
+    return profile
+
+
+def ensure_starter_cars(profile):
+    """Guarantees player has both a starter street supercar and F1 vehicle unlocked."""
+    owned_car_ids = set(profile.garage_cars.values_list('car_id', flat=True))
+    street_car = Car.objects.filter(slug='nissan-gtr-nismo').first() or Car.objects.exclude(category='Formula 1').first()
+    has_selected = profile.garage_cars.filter(is_selected=True).exists()
+
+    if street_car and street_car.id not in owned_car_ids:
         PlayerCar.objects.create(
             player=profile,
-            car=default_car,
-            color=default_car.default_color,
-            is_selected=True
+            car=street_car,
+            color=street_car.default_color,
+            is_selected=not has_selected
         )
-    return profile
+        has_selected = True
+
+    f1_car = Car.objects.filter(slug='f1-2022-ferrari').first() or Car.objects.filter(is_default=True).first()
+    if f1_car and f1_car.id not in owned_car_ids:
+        PlayerCar.objects.create(
+            player=profile,
+            car=f1_car,
+            color=f1_car.default_color,
+            is_selected=not has_selected
+        )
 
 class ProfileAPIView(APIView):
     def get(self, request):
